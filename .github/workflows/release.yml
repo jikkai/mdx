@@ -1,0 +1,154 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  verify-publish-credentials:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify npm publish token
+        run: |
+          if [ -z "$NODE_AUTH_TOKEN" ]; then
+            echo "NPM_TOKEN secret is required before building release binaries." >&2
+            exit 1
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  build-native:
+    needs: verify-publish-credentials
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-15
+            target: aarch64-apple-darwin
+            platform: darwin-arm64
+            flags: ''
+          - os: macos-15-intel
+            target: x86_64-apple-darwin
+            platform: darwin-x64
+            flags: ''
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            platform: linux-arm64-gnu
+            flags: --use-napi-cross
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x64-gnu
+            flags: --use-napi-cross
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            platform: linux-arm64-musl
+            flags: -x
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-musl
+            platform: linux-x64-musl
+            flags: -x
+          - os: windows-2025
+            target: x86_64-pc-windows-msvc
+            platform: win32-x64-msvc
+            flags: ''
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+          targets: ${{ matrix.target }}
+      - uses: mlugg/setup-zig@v2
+        if: contains(matrix.target, 'musl')
+        with:
+          version: 0.14.1
+      - uses: taiki-e/install-action@v2
+        if: contains(matrix.target, 'musl')
+        with:
+          tool: cargo-zigbuild
+      - run: pnpm install --frozen-lockfile
+      - name: Build native binding
+        shell: bash
+        run: pnpm exec napi build --release --platform --no-js --dts native.d.ts --target ${{ matrix.target }} ${{ matrix.flags }}
+      - name: Load test native binding
+        shell: bash
+        run: |
+          if [[ '${{ matrix.platform }}' == *-musl ]]; then
+            docker run --rm -v "$PWD:/work" -w /work node:20-alpine node -e "require('./index.${{ matrix.platform }}.node')"
+          else
+            node -e "require('./index.${{ matrix.platform }}.node')"
+          fi
+      - name: Stage native package
+        shell: bash
+        run: |
+          mkdir -p release/${{ matrix.platform }}
+          cp index.${{ matrix.platform }}.node release/${{ matrix.platform }}/
+          cp npm/${{ matrix.platform }}/package.json npm/${{ matrix.platform }}/README.md release/${{ matrix.platform }}/
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}
+          path: release/${{ matrix.platform }}
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs:
+      - verify-publish-credentials
+      - build-native
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.20.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.97.1
+      - run: pnpm install --frozen-lockfile
+      - name: Verify release source
+        run: pnpm run check
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+      - run: pnpm exec napi artifacts --output-dir artifacts --npm-dir npm
+      - name: Verify release version and artifacts
+        shell: bash
+        run: |
+          test "v$(node -p "require('./package.json').version")" = "$GITHUB_REF_NAME"
+          node scripts/check-artifacts.mjs npm
+          pnpm exec napi prepublish -t npm --no-gh-release --dry-run
+      - name: Dry-run every package
+        shell: bash
+        run: |
+          for target in darwin-arm64 darwin-x64 linux-arm64-gnu linux-arm64-musl linux-x64-gnu linux-x64-musl win32-x64-msvc; do
+            npm pack --dry-run --ignore-scripts "./npm/$target"
+          done
+          npm pack --dry-run --ignore-scripts
+      - name: Publish native packages, then root
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_ACCESS: public
+          NPM_CONFIG_PROVENANCE: true

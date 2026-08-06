@@ -1,0 +1,19 @@
+{
+  "name": "@amamo/mdx-darwin-x64",
+  "version": "0.1.0",
+  "description": "A native MDX content compiler with Vite and Next adapters",
+  "license": "MIT",
+  "files": [
+    "index.darwin-x64.node"
+  ],
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "main": "index.darwin-x64.node",
+  "engines": {
+    "node": ">=20.19"
+  }
+}

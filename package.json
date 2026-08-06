@@ -1,0 +1,109 @@
+{
+  "name": "@amamo/mdx",
+  "version": "0.1.0",
+  "description": "A native MDX content compiler with Vite and Next adapters",
+  "license": "MIT",
+  "files": [
+    "dist/*.cjs",
+    "dist/*.d.ts",
+    "dist/*.js",
+    "native.cjs",
+    "native.d.ts",
+    "LICENSE",
+    "README.md"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "import": "./dist/vite.js"
+    },
+    "./next": {
+      "types": "./dist/next.d.ts",
+      "import": "./dist/next.js"
+    }
+  },
+  "scripts": {
+    "prepare": "simple-git-hooks",
+    "build:native": "napi build --platform --output-dir . --no-js --dts native.d.ts",
+    "build:ts": "tsc -p tsconfig.json",
+    "build": "pnpm run build:native && pnpm run build:ts",
+    "format": "oxfmt . && cargo fmt",
+    "format:check": "oxfmt --check . && cargo fmt --check",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "prepublishOnly": "napi prepublish -t npm --no-gh-release",
+    "test": "pnpm run build && vitest run src/__tests__",
+    "test:rust": "cargo test",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "check": "pnpm run format:check && pnpm run lint && cargo clippy --all-targets -- -D warnings && cargo test && pnpm run typecheck && pnpm run test",
+    "release": "verso"
+  },
+  "dependencies": {
+    "shiki": "4.4.2"
+  },
+  "devDependencies": {
+    "@amamo/oxlint-config": "1.0.0",
+    "@amamo/verso": "1.0.0",
+    "@napi-rs/cli": "3.8.2",
+    "@types/node": "26.1.2",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.4",
+    "lint-staged": "17.3.0",
+    "next": "16.3.0",
+    "oxfmt": "0.62.0",
+    "oxlint": "1.77.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "simple-git-hooks": "2.13.1",
+    "typescript": "7.0.2",
+    "vite": "8.2.0",
+    "vitest": "4.1.10"
+  },
+  "peerDependencies": {
+    "next": "^16.0.0",
+    "react": "^19.0.0",
+    "vite": "^8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "next": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "vite": {
+      "optional": true
+    }
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "lint-staged": {
+    "*.{js,jsx,mjs,cjs,ts,tsx,mts,cts}": [
+      "oxfmt --check --no-error-on-unmatched-pattern",
+      "oxlint --no-error-on-unmatched-pattern"
+    ],
+    "*.{json,jsonc,json5,yaml,yml,toml,md,mdx,css,scss,less,html,graphql,gql}": "oxfmt --check --no-error-on-unmatched-pattern"
+  },
+  "napi": {
+    "binaryName": "index",
+    "targets": [
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "aarch64-unknown-linux-gnu",
+      "x86_64-unknown-linux-gnu",
+      "aarch64-unknown-linux-musl",
+      "x86_64-unknown-linux-musl",
+      "x86_64-pc-windows-msvc"
+    ]
+  },
+  "engines": {
+    "node": ">=20.19"
+  },
+  "packageManager": "pnpm@11.20.0"
+}

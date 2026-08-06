@@ -1,0 +1,12 @@
+{
+  "editor.formatOnSave": false,
+  "editor.formatOnSaveMode": "file",
+  "editor.codeActionsOnSave": {
+    "source.format.oxc": "always",
+    "source.fixAll.oxc": "always"
+  },
+  "[javascript][javascriptreact][typescript][typescriptreact][json][jsonc][markdown][mdx][yaml]": {
+    "editor.defaultFormatter": "oxc.oxc-vscode"
+  },
+  "oxc.requireConfig": true
+}

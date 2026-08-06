@@ -1,0 +1,9 @@
+/dist/
+/node_modules/
+/target/
+**/.amamo-mdx/
+**/.next/
+fixtures/next/out/
+/*.node
+/native.d.ts
+*.tgz

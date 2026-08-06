@@ -1,0 +1,5 @@
+[version]
+cargo_manifest_paths = ["Cargo.toml"]
+
+[changelog]
+enabled = false

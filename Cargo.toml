@@ -1,0 +1,38 @@
+[package]
+name = "amamo-mdx-native"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+path = "native/src/lib.rs"
+
+[dependencies]
+blake3 = "1.8.5"
+jsonschema = { version = "0.49.5", default-features = false }
+markdown = "1.0.0"
+mdxjs = "1.0.4"
+napi = { version = "3.12.0", default-features = false, features = ["napi8"] }
+napi-derive = "3.6.2"
+serde = { version = "=1.0.224", features = ["derive"] }
+serde_json = "1.0.145"
+sha2 = "0.10.9"
+swc_core = { version = "27.0.6", features = ["common", "ecma_ast", "ecma_visit"] }
+yaml_serde = "0.10.4"
+
+[build-dependencies]
+napi-build = "2.4.0"
+
+[profile.release]
+lto = true
+strip = "symbols"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+default_trait_access = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+needless_pass_by_value = "allow"
+too_many_arguments = "allow"
+too_many_lines = "allow"

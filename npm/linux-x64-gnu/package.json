@@ -1,0 +1,22 @@
+{
+  "name": "@amamo/mdx-linux-x64-gnu",
+  "version": "0.1.0",
+  "description": "A native MDX content compiler with Vite and Next adapters",
+  "license": "MIT",
+  "files": [
+    "index.linux-x64-gnu.node"
+  ],
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "libc": [
+    "glibc"
+  ],
+  "main": "index.linux-x64-gnu.node",
+  "engines": {
+    "node": ">=20.19"
+  }
+}
