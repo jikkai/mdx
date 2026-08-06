@@ -77,6 +77,7 @@ export async function createShikiRenderer(
       if (disposed) throw new Error('AMAMO_SHIKI_DISPOSED: Shiki renderer is disposed')
       const languages = await Promise.all(blocks.map((block) => loadLanguage(block.lang)))
       return blocks.map((block, index) => {
+        const language = block.lang
         const hast = highlighter.codeToHast(block.code, {
           colorReplacements: config.colorReplacements,
           defaultColor: false,
@@ -86,6 +87,18 @@ export async function createShikiRenderer(
             dark: config.themes.dark,
             light: config.themes.light,
           },
+          transformers:
+            language && !['text', 'plain', 'plaintext'].includes(language)
+              ? [
+                  {
+                    pre(node) {
+                      const classes = String(node.properties.class ?? '').split(' ')
+                      classes.push(`language-${language}`)
+                      node.properties.class = classes.filter(Boolean).join(' ')
+                    },
+                  },
+                ]
+              : undefined,
         })
         return {
           blockId: block.blockId,

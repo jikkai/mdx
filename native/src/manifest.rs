@@ -120,9 +120,9 @@ pub fn project_field(
             Ok(Value::Bool(source.is_some_and(|value| !value.is_null())))
         }
         Some(ProjectionTransform::Sha256) => {
-            let value = source
-                .or(projection.default.as_ref())
-                .unwrap_or(&Value::Null);
+            let Some(value) = source.or(projection.default.as_ref()) else {
+                return Ok(Value::Null);
+            };
             let bytes = value.as_str().map_or_else(
                 || serde_json::to_vec(value).expect("JSON value serializes"),
                 |value| value.as_bytes().to_vec(),
@@ -349,6 +349,22 @@ mod tests {
             hash,
             json!("2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b")
         );
+        let missing_hash = project_field(
+            "passwordHash",
+            &Projection {
+                default: None,
+                from: "password".into(),
+                transform: Some(ProjectionTransform::Sha256),
+            },
+            &public,
+            &json!({}),
+            &["password".into()],
+            "/project/post.mdx",
+            std::path::Path::new("/project"),
+        )
+        .unwrap();
+        assert_eq!(missing_hash, serde_json::Value::Null);
+
         let diagnostics = project_field(
             "password",
             &Projection {

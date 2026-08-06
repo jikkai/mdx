@@ -78,10 +78,10 @@ test('injects real Shiki HAST into the compiled module', async () => {
       collection: 'posts',
       file: '/project/content/posts/code.mdx',
       key: 'code',
-      source: '---\ntitle: Code\n---\n```ts\nconst n: number = 1\n```\n',
+      source: '---\ntitle: Code\n---\n```ts\nconst n: number = 1\n```\n```text\nplain text\n```\n',
     },
   ])
-  assert.equal(batch.codeBlocks.length, 1)
+  assert.equal(batch.codeBlocks.length, 2)
   const renderer = await createShikiRenderer(config.highlight)
 
   try {
@@ -89,7 +89,8 @@ test('injects real Shiki HAST into the compiled module', async () => {
     assert.match(records[0]?.module ?? '', /--shiki-dark/)
     assert.match(records[0]?.module ?? '', /style: \{/)
     assert.doesNotMatch(records[0]?.module ?? '', /style: "--shiki-dark/)
-    assert.doesNotMatch(records[0]?.module ?? '', /language-ts/)
+    assert.match(records[0]?.module ?? '', /language-ts/)
+    assert.doesNotMatch(records[0]?.module ?? '', /language-text/)
   } finally {
     renderer.dispose()
   }
