@@ -348,12 +348,12 @@ pub fn prepare_batch(config_json: String, inputs_json: String) -> Result<Prepare
         .map_err(diagnostic_error)?;
         let mut derived = serde_json::Map::new();
         if config.derived.reading_time {
-            let words = parsed.body.split_whitespace().count();
+            let words = prepared.reading_words;
             derived.insert(
                 "readingTime".into(),
                 serde_json::json!({
                     "words": words,
-                    "minutes": words.div_ceil(200).max(1),
+                    "minutes": words.div_ceil(300).max(1),
                 }),
             );
         }

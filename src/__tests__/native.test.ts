@@ -72,6 +72,35 @@ test('maps schema failures to structured diagnostics', () => {
   )
 })
 
+test('counts CJK text but excludes code from reading time', () => {
+  const readingConfig = normalizeConfig({
+    cache: false,
+    highlight: false,
+    root: '/project',
+    collections: {
+      posts: {
+        directory: 'content/posts',
+        schema: {
+          type: 'object',
+          properties: { title: { type: 'string' } },
+          required: ['title'],
+        },
+      },
+    },
+    derived: { readingTime: true },
+  })
+  const batch = prepareNativeBatch(readingConfig, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/cjk.mdx',
+      key: 'cjk',
+      source: `---\ntitle: CJK\n---\n${'字'.repeat(201)}\n\n\`\`\`text\n${'字'.repeat(500)}\n\`\`\`\n`,
+    },
+  ])
+
+  assert.deepEqual(batch.finish([])[0]?.derived.readingTime, { minutes: 1, words: 201 })
+})
+
 test('injects real Shiki HAST into the compiled module', async () => {
   const batch = prepareNativeBatch(config, [
     {

@@ -29,6 +29,7 @@ pub struct PreparedMdx {
     pub code_blocks: Vec<CodeBlock>,
     pub dependencies: Vec<PathBuf>,
     pub diagnostics: Vec<Diagnostic>,
+    pub reading_words: usize,
     pub(crate) tree: mdxjs::hast::Node,
 }
 
@@ -94,6 +95,7 @@ pub fn prepare_mdx(
     let options = mdx_options(file, config);
     let mdast = mdxjs::mdast_util_from_mdx(body, &options)
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
+    let reading_words = reading_units(&mdast);
     let mut code_blocks = Vec::new();
     if highlight {
         collect_code_blocks(&mdast, document_id, &mut code_blocks);
@@ -108,8 +110,45 @@ pub fn prepare_mdx(
         code_blocks,
         dependencies: media.dependencies,
         diagnostics: media.diagnostics,
+        reading_words,
         tree,
     })
+}
+
+fn reading_units(node: &markdown::mdast::Node) -> usize {
+    match node {
+        markdown::mdast::Node::Code(_) | markdown::mdast::Node::InlineCode(_) => 0,
+        markdown::mdast::Node::Text(text) => count_reading_units(&text.value),
+        _ => node
+            .children()
+            .map(|children| children.iter().map(reading_units).sum())
+            .unwrap_or_default(),
+    }
+}
+
+fn count_reading_units(text: &str) -> usize {
+    let mut count = 0;
+    let mut in_english_word = false;
+    for character in text.chars() {
+        if matches!(
+            character,
+            '\u{4e00}'..='\u{9fff}'
+                | '\u{3040}'..='\u{309f}'
+                | '\u{30a0}'..='\u{30ff}'
+                | '\u{ac00}'..='\u{d7af}'
+        ) {
+            count += 1;
+            in_english_word = false;
+        } else if character.is_ascii_alphabetic() {
+            if !in_english_word {
+                count += 1;
+                in_english_word = true;
+            }
+        } else {
+            in_english_word = false;
+        }
+    }
+    count
 }
 
 pub fn finish_mdx(

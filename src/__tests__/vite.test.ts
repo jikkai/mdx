@@ -3,7 +3,7 @@ import { createRequire } from 'node:module'
 import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 
-import { build, createServer } from 'vite'
+import { build, createBuilder, createServer } from 'vite'
 import { test } from 'vitest'
 
 import { amamoMdx } from '../vite.js'
@@ -40,6 +40,32 @@ test('Vite builds MDX without rewriting unchanged generated outputs', async () =
       resolve: { alias: { 'react/jsx-runtime': reactJsxRuntime } },
     })
     assert.equal((await stat(fixture.publicManifest)).mtimeMs, firstWrite)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Vite reuses one compiler across client and SSR environments', async () => {
+  const fixture = await createCompilerFixture()
+  const entry = path.join(fixture.root, 'main.js')
+  await writeFile(entry, "import Post from './content/posts/hello.mdx'; console.log(Post)\n")
+
+  try {
+    const builder = await createBuilder({
+      root: fixture.root,
+      builder: { sharedPlugins: true },
+      environments: {
+        client: { build: { outDir: 'dist/client', rollupOptions: { input: entry } } },
+        ssr: { build: { outDir: 'dist/server', rollupOptions: { input: entry }, ssr: true } },
+      },
+      logLevel: 'silent',
+      plugins: [amamoMdx(fixture.config)],
+      resolve: { alias: { 'react/jsx-runtime': reactJsxRuntime } },
+    })
+
+    await builder.buildApp()
+    assert.ok((await stat(path.join(fixture.root, 'dist/client'))).isDirectory())
+    assert.ok((await stat(path.join(fixture.root, 'dist/server'))).isDirectory())
   } finally {
     await fixture.cleanup()
   }

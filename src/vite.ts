@@ -73,9 +73,6 @@ export function amamoMdx(config: IAmamoMdxConfig): Plugin {
         }
       })
     },
-    async closeBundle() {
-      await dispose()
-    },
   }
 }
 
