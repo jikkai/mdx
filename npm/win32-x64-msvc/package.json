@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "description": "A native MDX content compiler with Vite and Next adapters",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jikkai/mdx"
+  },
   "files": [
     "index.win32-x64-msvc.node"
   ],

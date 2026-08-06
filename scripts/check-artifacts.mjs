@@ -20,6 +20,17 @@ if (process.argv[2] === '--local') {
   await readFile(path.join(path.dirname(loader), `index.${target}.node`))
   console.log(JSON.stringify({ loader, target }))
 } else {
+  const rootPackage = JSON.parse(
+    await readFile(new URL('../package.json', import.meta.url), 'utf8'),
+  )
+  const configuredRepository = rootPackage.repository?.url
+  const expectedRepository = process.env.GITHUB_REPOSITORY
+    ? `${process.env.GITHUB_SERVER_URL ?? 'https://github.com'}/${process.env.GITHUB_REPOSITORY}`
+    : configuredRepository
+  if (!configuredRepository || configuredRepository !== expectedRepository) {
+    throw new Error(`Expected root repository.url to be ${expectedRepository}`)
+  }
+
   const artifactDirectory = path.resolve(process.argv[2] ?? 'artifacts')
   const directories = (await readdir(artifactDirectory, { withFileTypes: true }))
     .filter((entry) => entry.isDirectory())
@@ -41,6 +52,7 @@ if (process.argv[2] === '--local') {
       const bindings = files.filter((file) => file.endsWith('.node'))
       if (
         pkg.name !== `@amamo/mdx-${target}` ||
+        pkg.repository?.url !== expectedRepository ||
         pkg.main !== expectedBinding ||
         bindings.length !== 1 ||
         bindings[0] !== expectedBinding
