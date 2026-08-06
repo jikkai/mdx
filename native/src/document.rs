@@ -12,7 +12,7 @@ use crate::Diagnostic;
 use crate::config::{
     NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig, apply_schema_defaults_and_validate,
 };
-use crate::hast::{apply_hard_breaks, rewrite_media};
+use crate::hast::rewrite_media;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,17 +93,17 @@ pub fn prepare_mdx(
     media: &NativeMediaConfig,
 ) -> Result<PreparedMdx, Vec<Diagnostic>> {
     let options = mdx_options(file, config);
-    let mdast = mdxjs::mdast_util_from_mdx(body, &options)
+    let mut mdast = mdxjs::mdast_util_from_mdx(body, &options)
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
     let reading_words = reading_units(&mdast);
     let mut code_blocks = Vec::new();
     if highlight {
         collect_code_blocks(&mdast, document_id, &mut code_blocks);
     }
-    let mut tree = mdxjs::mdast_util_to_hast(&mdast);
     if config.hard_breaks {
-        apply_hard_breaks(&mut tree);
+        apply_hard_breaks(&mut mdast);
     }
+    let mut tree = mdxjs::mdast_util_to_hast(&mdast);
     let media = rewrite_media(&mut tree, root, Path::new(file), media)?;
 
     Ok(PreparedMdx {
@@ -113,6 +113,37 @@ pub fn prepare_mdx(
         reading_words,
         tree,
     })
+}
+
+fn apply_hard_breaks(node: &mut markdown::mdast::Node) {
+    let Some(children) = node.children_mut() else {
+        return;
+    };
+    let old_children = std::mem::take(children);
+    for mut child in old_children {
+        if let markdown::mdast::Node::Text(text) = &child
+            && (text.value.contains('\n') || text.value.contains('\r'))
+        {
+            let normalized = text.value.replace("\r\n", "\n").replace('\r', "\n");
+            let parts = normalized.split('\n').collect::<Vec<_>>();
+            for (index, part) in parts.iter().enumerate() {
+                if !part.is_empty() {
+                    children.push(markdown::mdast::Node::Text(markdown::mdast::Text {
+                        value: (*part).into(),
+                        position: None,
+                    }));
+                }
+                if index + 1 < parts.len() {
+                    children.push(markdown::mdast::Node::Break(markdown::mdast::Break {
+                        position: None,
+                    }));
+                }
+            }
+            continue;
+        }
+        apply_hard_breaks(&mut child);
+        children.push(child);
+    }
 }
 
 fn reading_units(node: &markdown::mdast::Node) -> usize {
@@ -228,7 +259,7 @@ fn react_style_object(style: &str) -> Option<Expr> {
             Some(PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
                 key: PropName::Str(Str {
                     span: DUMMY_SP,
-                    value: name.into(),
+                    value: react_style_name(name).into(),
                     raw: None,
                 }),
                 value: Box::new(Expr::Lit(Lit::Str(Str {
@@ -243,6 +274,28 @@ fn react_style_object(style: &str) -> Option<Expr> {
         span: DUMMY_SP,
         props: properties,
     }))
+}
+
+fn react_style_name(name: &str) -> String {
+    if name.starts_with("--") {
+        return name.into();
+    }
+    let mut result = String::with_capacity(name.len());
+    let mut uppercase_next = false;
+    for character in name.chars() {
+        if character == '-' {
+            uppercase_next = true;
+        } else if uppercase_next {
+            result.extend(character.to_uppercase());
+            uppercase_next = false;
+        } else {
+            result.push(character);
+        }
+    }
+    if name.starts_with("-ms-") {
+        result.replace_range(..1, "m");
+    }
+    result
 }
 
 fn mdx_options(file: &str, config: &NativeMdxConfig) -> mdxjs::Options {
@@ -402,6 +455,38 @@ mod tests {
         assert!(module.contains("export const frontmatter"));
         assert!(module.contains("export const readingTime"));
         assert!(!module.contains("secret"));
+    }
+
+    #[test]
+    fn hard_breaks_only_replace_newlines_inside_text_nodes() {
+        let source = "first\nsecond\n\n# Heading\n\n| a | b |\n| - | - |\n| 1 | 2 |\n";
+        let options = NativeMdxConfig {
+            gfm: true,
+            hard_breaks: true,
+            jsx_import_source: "react".into(),
+            provider_import_source: String::new(),
+        };
+        let prepared = prepare_mdx(
+            "posts/hello",
+            "/project/hello.mdx",
+            source,
+            &options,
+            false,
+            std::path::Path::new("/project"),
+            &NativeMediaConfig::default(),
+        )
+        .unwrap();
+        let module = finish_mdx(
+            prepared,
+            "/project/hello.mdx",
+            source,
+            &options,
+            &json!({}),
+            &json!({}),
+        )
+        .unwrap();
+
+        assert_eq!(module.matches("_components.br").count(), 1);
     }
 
     #[test]

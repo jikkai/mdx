@@ -28,7 +28,9 @@ test('uses official Shiki dual-theme HAST', async () => {
     ])
 
     assert.equal(result.length, 1)
-    assert.match(JSON.stringify(result[0]?.hast), /--shiki-dark/)
+    const hast = JSON.stringify(result[0]?.hast)
+    assert.match(hast, /background-color:#f0efea/)
+    assert.match(hast, /--shiki-dark/)
   } finally {
     await renderer.dispose()
   }

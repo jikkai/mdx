@@ -58,10 +58,6 @@ enum HastWire {
     Text { value: String },
 }
 
-pub fn apply_hard_breaks(tree: &mut Node) {
-    walk(tree, false);
-}
-
 pub fn decode_highlights(json: &str) -> Result<Vec<HighlightReplacement>, Vec<Diagnostic>> {
     let wires = serde_json::from_str::<Vec<HighlightWire>>(json).map_err(|error| {
         vec![Diagnostic::error(
@@ -447,97 +443,4 @@ pub(crate) fn normalize_path(path: &Path) -> PathBuf {
         }
     }
     normalized
-}
-
-fn walk(node: &mut Node, protected: bool) {
-    let protected = protected
-        || matches!(node, Node::Element(element) if element.tag_name == "pre" || element.tag_name == "code");
-    let Some(children) = node.children_mut() else {
-        return;
-    };
-
-    let old_children = std::mem::take(children);
-    for mut child in old_children {
-        if !protected
-            && let Node::Text(text) = &child
-            && text.value.contains('\n')
-        {
-            push_text_with_breaks(children, text);
-            continue;
-        }
-        walk(&mut child, protected);
-        children.push(child);
-    }
-}
-
-fn push_text_with_breaks(children: &mut Vec<Node>, text: &Text) {
-    let parts = text.value.split('\n').collect::<Vec<_>>();
-    for (index, part) in parts.iter().enumerate() {
-        if !part.is_empty() {
-            children.push(Node::Text(Text {
-                value: (*part).into(),
-                position: text.position.clone(),
-            }));
-        }
-        if index + 1 < parts.len() {
-            children.push(Node::Element(Element {
-                tag_name: "br".into(),
-                properties: vec![],
-                children: vec![],
-                position: None,
-            }));
-            children.push(Node::Text(Text {
-                value: "\n".into(),
-                position: None,
-            }));
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use mdxjs::hast::{Element, Node, Text};
-
-    use super::apply_hard_breaks;
-
-    #[test]
-    fn turns_soft_newlines_into_break_elements() {
-        let mut tree = Node::Element(Element {
-            tag_name: "p".into(),
-            properties: vec![],
-            children: vec![Node::Text(Text {
-                value: "first\nsecond".into(),
-                position: None,
-            })],
-            position: None,
-        });
-
-        apply_hard_breaks(&mut tree);
-
-        let children = tree.children().unwrap();
-        assert_eq!(children.len(), 4);
-        assert!(matches!(&children[1], Node::Element(element) if element.tag_name == "br"));
-    }
-
-    #[test]
-    fn leaves_code_newlines_untouched() {
-        let mut tree = Node::Element(Element {
-            tag_name: "pre".into(),
-            properties: vec![],
-            children: vec![Node::Element(Element {
-                tag_name: "code".into(),
-                properties: vec![],
-                children: vec![Node::Text(Text {
-                    value: "first\nsecond".into(),
-                    position: None,
-                })],
-                position: None,
-            })],
-            position: None,
-        });
-
-        apply_hard_breaks(&mut tree);
-
-        assert_eq!(tree.to_string(), "first\nsecond");
-    }
 }

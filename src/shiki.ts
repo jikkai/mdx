@@ -80,12 +80,11 @@ export async function createShikiRenderer(
         const language = block.lang
         const hast = highlighter.codeToHast(block.code, {
           colorReplacements: config.colorReplacements,
-          defaultColor: false,
           lang: languages[index] ?? 'text',
           meta: block.meta ? { __raw: block.meta } : undefined,
           themes: {
-            dark: config.themes.dark,
             light: config.themes.light,
+            dark: config.themes.dark,
           },
           transformers:
             language && !['text', 'plain', 'plaintext'].includes(language)

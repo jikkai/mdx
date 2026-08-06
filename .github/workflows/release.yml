@@ -48,10 +48,14 @@ jobs:
             target: aarch64-unknown-linux-musl
             platform: linux-arm64-musl
             flags: -x
+            zig_arch: aarch64
+            zig_sha256: f7a654acc967864f7a050ddacfaa778c7504a0eca8d2b678839c21eea47c992b
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
             platform: linux-x64-musl
             flags: -x
+            zig_arch: x86_64
+            zig_sha256: 24aeeec8af16c381934a6cd7d95c807a8cb2cf7df9fa40d359aa884195c4716c
           - os: windows-2025
             target: x86_64-pc-windows-msvc
             platform: win32-x64-msvc
@@ -60,7 +64,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4.4.0
         with:
           version: 11.20.0
       - uses: actions/setup-node@v7
@@ -71,10 +75,17 @@ jobs:
         with:
           toolchain: 1.97.1
           targets: ${{ matrix.target }}
-      - uses: mlugg/setup-zig@v2
+      - name: Install Zig
         if: contains(matrix.target, 'musl')
-        with:
-          version: 0.14.1
+        shell: bash
+        run: |
+          zig_archive="$RUNNER_TEMP/zig.tar.xz"
+          zig_dir="$RUNNER_TEMP/zig"
+          curl -fsSLo "$zig_archive" "https://ziglang.org/download/0.14.1/zig-${{ matrix.zig_arch }}-linux-0.14.1.tar.xz"
+          echo "${{ matrix.zig_sha256 }}  $zig_archive" | sha256sum -c -
+          mkdir -p "$zig_dir"
+          tar -xJf "$zig_archive" -C "$zig_dir" --strip-components=1
+          echo "$zig_dir" >> "$GITHUB_PATH"
       - uses: taiki-e/install-action@v2
         if: contains(matrix.target, 'musl')
         with:
@@ -115,7 +126,7 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@v7
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v4.4.0
         with:
           version: 11.20.0
       - uses: actions/setup-node@v7

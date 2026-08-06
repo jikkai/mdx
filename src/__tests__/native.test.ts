@@ -116,6 +116,7 @@ test('injects real Shiki HAST into the compiled module', async () => {
   try {
     const records = batch.finish(await renderer.highlight(batch.codeBlocks))
     assert.match(records[0]?.module ?? '', /--shiki-dark/)
+    assert.match(records[0]?.module ?? '', /"backgroundColor": "#ffffff"/)
     assert.match(records[0]?.module ?? '', /style: \{/)
     assert.doesNotMatch(records[0]?.module ?? '', /style: "--shiki-dark/)
     assert.match(records[0]?.module ?? '', /language-ts/)
