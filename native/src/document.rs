@@ -12,7 +12,7 @@ use crate::Diagnostic;
 use crate::config::{
     NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig, apply_schema_defaults_and_validate,
 };
-use crate::hast::rewrite_media;
+use crate::hast::{remove_table_line_breaks, rewrite_media};
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -104,6 +104,7 @@ pub fn prepare_mdx(
         apply_hard_breaks(&mut mdast);
     }
     let mut tree = mdxjs::mdast_util_to_hast(&mdast);
+    remove_table_line_breaks(&mut tree);
     let media = rewrite_media(&mut tree, root, Path::new(file), media)?;
 
     Ok(PreparedMdx {
@@ -369,6 +370,7 @@ fn split_frontmatter<'a>(
 mod tests {
     use std::fs;
 
+    use mdxjs::hast::Node;
     use serde_json::json;
 
     use crate::config::{MediaMissing, NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig};
@@ -455,6 +457,29 @@ mod tests {
         assert!(module.contains("export const frontmatter"));
         assert!(module.contains("export const readingTime"));
         assert!(!module.contains("secret"));
+    }
+
+    #[test]
+    fn gfm_tables_do_not_keep_structure_line_breaks() {
+        let source = "| a | b |\n| - | - |\n| 1 | 2 |\n";
+        let options = NativeMdxConfig {
+            gfm: true,
+            hard_breaks: true,
+            jsx_import_source: "react".into(),
+            provider_import_source: String::new(),
+        };
+        let prepared = prepare_mdx(
+            "posts/table",
+            "/project/table.mdx",
+            source,
+            &options,
+            false,
+            std::path::Path::new("/project"),
+            &NativeMediaConfig::default(),
+        )
+        .unwrap();
+
+        assert!(!has_table_structure_line_break(&prepared.tree));
     }
 
     #[test]
@@ -559,5 +584,25 @@ mod tests {
         .unwrap_err();
 
         assert_eq!(diagnostics[0].code, "AMAMO_MEDIA_OUTSIDE_ROOT");
+    }
+
+    fn has_table_structure_line_break(node: &Node) -> bool {
+        let is_table_structure = matches!(
+            node,
+            Node::Element(element)
+                if matches!(
+                    element.tag_name.as_str(),
+                    "table" | "thead" | "tbody" | "tfoot" | "tr" | "th" | "td"
+                )
+        );
+        let Some(children) = node.children() else {
+            return false;
+        };
+
+        (is_table_structure
+            && children
+                .iter()
+                .any(|child| matches!(child, Node::Text(text) if text.value == "\n")))
+            || children.iter().any(has_table_structure_line_break)
     }
 }

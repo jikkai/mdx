@@ -105,6 +105,25 @@ pub fn inject_highlights(tree: &mut Node, replacements: &HashMap<usize, Node>) -
     replace_code_blocks(tree, replacements, &mut block_id)
 }
 
+pub fn remove_table_line_breaks(node: &mut Node) {
+    let remove_line_breaks = matches!(
+        node,
+        Node::Element(element)
+            if matches!(
+                element.tag_name.as_str(),
+                "table" | "thead" | "tbody" | "tfoot" | "tr" | "th" | "td"
+            )
+    );
+    let Some(children) = node.children_mut() else {
+        return;
+    };
+
+    if remove_line_breaks {
+        children.retain(|child| !matches!(child, Node::Text(text) if text.value == "\n"));
+    }
+    children.iter_mut().for_each(remove_table_line_breaks);
+}
+
 fn wire_node(wire: HastWire) -> Result<Node, Vec<Diagnostic>> {
     match wire {
         HastWire::Root { .. } => Err(vec![Diagnostic::error(
