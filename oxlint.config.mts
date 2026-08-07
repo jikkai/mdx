@@ -2,6 +2,7 @@ import amamo from '@amamo/oxlint-config'
 
 export default amamo(
   {
+    ignores: ['**/dist/**', '**/.doctrine/**', '**/node_modules/**'],
     node: true,
     rules: {
       'vitest/expect-expect': 'off',

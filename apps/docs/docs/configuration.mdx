@@ -1,0 +1,221 @@
+---
+title: Configuration
+description: Collections, highlighting, media, manifests, the runtime cache, and every key in between.
+order: 3
+---
+
+`defineConfig` only annotates types; the meaningful work happens when the compiler is constructed.
+The compiler normalizes your config into `INormalizedConfig`, which is the same shape that flows
+into the cache fingerprint, the manifest renderer, and the Vite/Next adapters.
+
+This page is organized around the top-level keys.
+
+## Collections
+
+A collection is a directory of MDX files with a shared frontmatter schema. The compiler walks each
+collection, validates every record against the schema, and removes any field listed in
+`sensitive` before the record reaches the cache, the generated module, or a public manifest.
+
+```ts
+collections: {
+  posts: {
+    directory: 'content/posts',
+    extensions: ['.mdx'],
+    locales: { default: 'en', names: ['en', 'zh-CN'] },
+    schema: {
+      $schema: 'https://json-schema.org/draft/2020-12/schema',
+      type: 'object',
+      properties: {
+        title: { type: 'string' },
+        draft: { type: 'boolean' },
+      },
+      required: ['title'],
+    },
+    sensitive: ['draft'],
+    slug: { indexNames: ['index', 'page'] },
+  },
+}
+```
+
+| Key          | Default       | Purpose                                                           |
+| ------------ | ------------- | ----------------------------------------------------------------- |
+| `directory`  | required      | Resolved against `root`. Must exist (or be created) at build.     |
+| `extensions` | `['.mdx']`    | File extensions to include. Every entry must start with `.`.      |
+| `locales`    | none          | Locale variants for this collection. See below.                   |
+| `schema`     | required      | JSON Schema used to validate frontmatter.                         |
+| `sensitive`  | `[]`          | Fields stripped before serialization. See [Security](/security/). |
+| `slug`       | `index, page` | Files that collapse to the collection root slug.                  |
+
+When `locales` is set, the default locale must appear in `names`, and file naming follows
+`name.<locale>.mdx` (e.g. `getting-started.zh-CN.mdx`). Records missing the default locale
+resolve to a non-localized slug.
+
+## MDX
+
+```ts
+mdx: {
+  gfm: true,
+  hardBreaks: false,
+  jsxImportSource: 'react',
+  providerImportSource: '',
+}
+```
+
+| Key                    | Default   | Purpose                                                                                 |
+| ---------------------- | --------- | --------------------------------------------------------------------------------------- |
+| `gfm`                  | `true`    | Enable GitHub-flavored Markdown (tables, task lists, autolinks).                        |
+| `hardBreaks`           | `false`   | Render single newlines as `<br>`. CommonMark treats them as spaces by default.          |
+| `jsxImportSource`      | `'react'` | The `importSource` passed to the JSX runtime.                                           |
+| `providerImportSource` | `''`      | The `providerImportSource` passed to the JSX runtime. Use `''` to keep MDX JSX literal. |
+
+Setting `providerImportSource: ''` is the easiest way to leave authored JSX untouched without
+pulling in a JSX provider.
+
+## Highlighting
+
+```ts
+highlight: {
+  provider: 'shiki',
+  engine: 'oniguruma',
+  languages: 'auto',
+  themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+  unknownLanguage: 'error',
+  colorReplacements: {},
+}
+```
+
+| Key                 | Default                                            | Purpose                                                                           |
+| ------------------- | -------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `provider`          | `'shiki'`                                          | The highlighter. Only Shiki is shipped today.                                     |
+| `engine`            | `'oniguruma'`                                      | `oniguruma` for full grammar fidelity, `javascript` to avoid the WASM dependency. |
+| `languages`         | `'auto'`                                           | `auto` to load grammars on demand, or an explicit list to lock the set.           |
+| `themes`            | `{ light: 'vitesse-light', dark: 'vitesse-dark' }` | Light and dark Shiki themes.                                                      |
+| `unknownLanguage`   | `'error'`                                          | `'error'` to reject unknown languages, `'plain'` to render them as plain text.    |
+| `colorReplacements` | `{}`                                               | A map of `color` → `color` substitutions applied after highlighting.              |
+
+Set `highlight: false` to disable code highlighting entirely. Cache records and generated
+modules still run; they just skip the highlighter pass.
+
+## Media
+
+```ts
+media: {
+  attributes: {
+    audio: ['src'],
+    embed: ['src'],
+    img: ['src', 'srcset'],
+    object: ['data'],
+    source: ['src', 'srcset'],
+    track: ['src'],
+    video: ['src', 'poster'],
+  },
+  missing: 'error',
+}
+```
+
+| Key          | Default         | Purpose                                                                         |
+| ------------ | --------------- | ------------------------------------------------------------------------------- |
+| `attributes` | the table above | HTML attribute names per tag that hold media URLs. The compiler rewrites these. |
+| `missing`    | `'error'`       | `'error'` fails the build; `'warn'` logs and continues with the URL as written. |
+
+Relative URLs are resolved against the containing file, confined to `root` (including symlink
+resolution), and rewritten to a static import. The host application is expected to handle the
+asset at build time.
+
+Set `media: false` to disable media rewriting entirely.
+
+## Derived
+
+```ts
+derived: {
+  lastModified: false,
+  readingTime: false,
+}
+```
+
+Both keys are off by default. `lastModified` records the file's last-modified timestamp on the
+record, and `readingTime` estimates the read time from the document body. Enable only what you
+need; both add work to every transform.
+
+## Manifests
+
+```ts
+manifests: {
+  public: {
+    output: '.amamo-mdx/public.json',
+    collections: ['posts'],
+    key: 'key',
+    sort: [{ field: 'key', direction: 'asc' }],
+    fields: {
+      key: 'key',
+      title: 'title',
+    },
+  },
+  server: {
+    output: '.amamo-mdx/server.json',
+    fields: {
+      key: 'key',
+      protected: { from: 'password', transform: 'exists' },
+      passwordHash: { from: 'password', transform: 'sha256' },
+    },
+  },
+}
+```
+
+| Key           | Default       | Purpose                                                                       |
+| ------------- | ------------- | ----------------------------------------------------------------------------- |
+| `output`      | required      | Resolved against `root`. The path of the manifest file.                       |
+| `collections` | all           | The collections included in this manifest.                                    |
+| `key`         | collection id | The field used as each record's identifier. Defaults to the document's `key`. |
+| `sort`        | none          | An ordered list of `{ field, direction }` sort keys.                          |
+| `fields`      | required      | A map of `output key` → projection. See below.                                |
+
+A field is either a string (a direct copy of the named frontmatter field) or an object with a
+`from` source and an optional `transform`. The allowed transforms are:
+
+- `'exists'` — emits `true` if the source field is present, otherwise `false`. Useful for
+  protected-by-default fields.
+- `'sha256'` — emits the SHA-256 of the source field as a hex string. Useful for verifying
+  passwords server-side without ever shipping the plaintext.
+- `'mediaUrl'` — emits the resolved media URL of the source field. Available for fields that
+  store a relative media path.
+
+Sensitive fields can be projected in a manifest only as `'exists'` or `'sha256'`. Reading the
+plaintext value is impossible by construction — see [Security](/security/).
+
+## Cache
+
+```ts
+cache: {
+  directory: '.amamo-mdx/cache',
+}
+```
+
+| Key         | Default            | Purpose                                                    |
+| ----------- | ------------------ | ---------------------------------------------------------- |
+| `directory` | `.amamo-mdx/cache` | Where compiled records and the highlighter cache are kept. |
+
+The cache key is a SHA-256 of the config fingerprint (which itself includes the package
+version, the Shiki version, and the normalized config) plus the source bytes. Set
+`cache: false` to disable caching entirely; the compiler will still produce the generated
+module and manifests.
+
+## Generated output
+
+```ts
+generatedDirectory: '.amamo-mdx'
+```
+
+The single directory the compiler writes to. `collections.mjs`, `collections.d.mts`, `index.json`,
+and every configured manifest are written here. The default keeps everything under one prefix so
+the host application's `.gitignore` is straightforward.
+
+## Root
+
+```ts
+root: import.meta.dirname
+```
+
+Resolves the directory every relative path in the config is interpreted against. If unset, the
+compiler uses `process.cwd()`. Set this when your config lives somewhere other than the project
+root, or when the config is loaded in a context where `cwd` is not the project root.

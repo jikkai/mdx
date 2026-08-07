@@ -1,8 +1,13 @@
 /dist/
 /node_modules/
+**/node_modules/
 /target/
 **/.amamo-mdx/
 **/.next/
+**/.doctrine/
+**/.DS_Store
+**/dist/
+docs/superpowers/
 fixtures/next/out/
 /*.node
 /native.d.ts

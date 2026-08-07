@@ -1,0 +1,53 @@
+---
+title: 原生目标
+description: 预编译原生二进制列表,以及在不兼容目标上会发生什么。
+order: 8
+---
+
+`@amamo/mdx` 为每个支持的平台预编译原生绑定。绑定通过 `optionalDependencies` 安装;在不
+支持的平台上 install 跳过对应包,在 `createCompiler` 调用时拒绝加载。
+
+## 支持的目标
+
+| 目标三元组                   | 操作系统 | 架构          |
+| ---------------------------- | -------- | ------------- |
+| `aarch64-apple-darwin`       | macOS    | arm64         |
+| `x86_64-apple-darwin`        | macOS    | x64           |
+| `aarch64-unknown-linux-gnu`  | Linux    | arm64 (glibc) |
+| `x86_64-unknown-linux-gnu`   | Linux    | x64 (glibc)   |
+| `aarch64-unknown-linux-musl` | Linux    | arm64 (musl)  |
+| `x86_64-unknown-linux-musl`  | Linux    | x64 (musl)    |
+| `x86_64-pc-windows-msvc`     | Windows  | x64           |
+
+CI 矩阵在原生 runner 上编译每个目标。macOS x64 用 Intel runner;Linux musl 通过
+`cargo-zigbuild` 加固定版本 Zig 工具链交叉编译。
+
+## 不兼容的目标会怎样
+
+`createCompiler` 在构造时直接调到原生绑定。如果绑定缺失或加载失败,调用被拒绝。没有
+JavaScript 或 WASI 回退,也没有开关去启用 —— 加回退会改变性能与语言覆盖的形态,而这个决定
+不想默认替用户做。
+
+发布原生包时,在 `napi.targets` 数组里挑一个受支持的目标三元组,让 napi CLI 为当前主机
+编译正确的绑定。
+
+## Node.js 版本要求
+
+包按 Node.js 20.19 及以上版本测试。更老的 Node 缺少编译器依赖的 async hooks 与
+`node:fs/promises` 行为。
+
+## 选高亮器引擎
+
+原生绑定在每个目标上都一样。高亮器引擎是另一个选择:
+
+- `oniguruma` —— 默认。Shiki 的 WASM 引擎,完整语法保真度,启动稍慢。
+- `javascript` —— Shiki 的 JavaScript 引擎。启动更轻,语言集更小。
+
+在配置的 `highlight` 块里设置引擎。两者在共同覆盖的语言上输出完全一致;差别是语法的
+覆盖范围,不是正确性。
+
+## 自定义目标
+
+原生绑定是一个普通的 napi-rs 项目。要构建不在上表中的目标,可以用自定义 `--target` 标志
+跑 napi build。CI 矩阵是实际可行性的真相之源;新目标的移植应在发布前先在目标机器上跑
+`cargo test` 验证。

@@ -1,0 +1,79 @@
+---
+title: Next 16
+description: Add @amamo/mdx/next to a Next config to share the same compiler with Vite projects.
+order: 6
+---
+
+The Next wrapper registers the same private read-only loader for Turbopack and for the
+opt-in Webpack path. The config wrapper accepts and awaits an existing Next config function, so
+it composes with whatever else the application already configures.
+
+## Install and configure
+
+```sh
+pnpm add @amamo/mdx
+```
+
+```js
+// next.config.mjs
+import { withAmamoMdx } from '@amamo/mdx/next'
+import amamo from './amamo.config.js'
+
+export default withAmamoMdx(amamo)({ reactStrictMode: true })
+```
+
+`withAmamoMdx(config)(nextConfig)` returns the resolved Next config. Pass an object, a
+`NextConfig`, or a function that returns one; the wrapper awaits the result and merges it
+before adding the MDX loader.
+
+## How the loader is registered
+
+The wrapper adds the same private loader twice:
+
+- Under `turbopack.rules['*.mdx']` for the default Turbopack path.
+- Under `webpack.module.rules` for projects that explicitly opt into Webpack.
+
+The loader is registered with two options: the config fingerprint and the path of the private
+loader index. The config fingerprint keeps the loader's behavior in lockstep with whatever the
+compiler wrote; the index lets the loader look up compiled records by file path without going
+through the public collection module.
+
+## Startup and watching
+
+The wrapper runs `build()` exactly once, regardless of how many times `next dev` or `next build`
+kicks it. In `next dev` it also starts the file watcher once the first build finishes; in
+`next build` it leaves the watcher idle. Calling the wrapper with anything other than
+`PHASE_DEVELOPMENT_SERVER` or `PHASE_PRODUCTION_BUILD` is a no-op.
+
+## Composing with an existing config
+
+```js
+// next.config.mjs
+import { withAmamoMdx } from '@amamo/mdx/next'
+import amamo from './amamo.config.js'
+
+export default withAmamoMdx(amamo)(async (phase, { defaultConfig }) => {
+  return {
+    ...defaultConfig,
+    images: { remotePatterns: [{ hostname: 'cdn.example' }] },
+  }
+})
+```
+
+The wrapper awaits the function and forwards the resolved config to Next. If the function
+returns a `webpack` field, the wrapper preserves it and adds its own MDX rule on top of whatever
+the function produced.
+
+## Turbopack and Webpack together
+
+Both loaders share the same compiled records. Switching from Turbopack to Webpack (or vice
+versa) does not invalidate the cache, and a project that uses both surfaces — for example, a
+Turbopack app with a Webpack-only edge runtime — reads from the same `index.json`.
+
+## What the loader does not do
+
+- It does not transform content outside `*.mdx`. Other file types follow the host application's
+  own configuration.
+- It does not read or write the public collection module. The public module is for application
+  code; the private loader is for the bundler.
+- It does not watch for new collections. Restart the dev server after editing `amamo.config.ts`.

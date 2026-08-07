@@ -1,0 +1,122 @@
+---
+title: 快速开始
+description: 安装 @amamo/mdx、编写配置、执行编译,并查看生成产物。
+order: 2
+---
+
+## 运行条件
+
+- **Node.js 20.19 或更高版本** —— 包及其原生绑定按此最低版本测试。
+- **受支持的目标平台** —— `@amamo/mdx` 为一组目标预编译原生二进制,其它平台直接拒绝加载。
+  详见[原生目标](/zh-CN/native-targets/)。
+- **可信作者** —— MDX 中可以包含可执行 JavaScript。编译器不是沙箱。
+
+## 安装
+
+```sh
+pnpm add @amamo/mdx
+```
+
+匹配当前平台的原生绑定会通过 `optionalDependencies` 自动安装。不提供 JavaScript 或 WASI
+回退;在不支持的目标上绑定加载会失败。
+
+## 编写配置
+
+配置只能是纯可序列化数据。函数和可执行插件被刻意拒绝,这样一份配置才能被任何人缓存、哈希并
+复现。
+
+```ts
+// amamo.config.ts
+import { defineConfig } from '@amamo/mdx'
+
+export default defineConfig({
+  root: import.meta.dirname,
+  collections: {
+    posts: {
+      directory: 'content/posts',
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          password: { type: 'string' },
+        },
+        required: ['title'],
+      },
+      sensitive: ['password'],
+    },
+  },
+  highlight: {
+    provider: 'shiki',
+    engine: 'oniguruma',
+    themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+    unknownLanguage: 'plain',
+  },
+  media: { missing: 'warn' },
+  manifests: {
+    public: {
+      output: '.amamo-mdx/public.json',
+      fields: { key: 'key', title: 'title' },
+    },
+    server: {
+      output: '.amamo-mdx/server.json',
+      key: 'key',
+      fields: {
+        key: 'key',
+        protected: { from: 'password', transform: 'exists' },
+        passwordHash: { from: 'password', transform: 'sha256' },
+      },
+    },
+  },
+})
+```
+
+这份配置一眼能看出几个关注点:
+
+- `collections` 声明哪些目录放内容,以及如何校验。
+- `highlight` 控制语法高亮器。
+- `media` 决定引用到的图片、视频或源文件缺失时怎么办。
+- `manifests` 把校验过的记录投影成宿主应用可以读的 JSON 文件。
+
+`defineConfig` 只在类型层面打注解,原样返回入参。
+
+## 编译
+
+```ts
+import { createCompiler } from '@amamo/mdx'
+import config from './amamo.config.js'
+
+const compiler = await createCompiler(config)
+await compiler.build()
+await compiler.dispose()
+```
+
+`build()` 把生成模块、它的声明文件、私有加载器索引,以及所有配置的 manifest 写入
+`generatedDirectory` 指定的目录(默认 `.amamo-mdx/`)。字节未变的文件不会被重写。
+
+## 产物
+
+对于上面的配置和一篇 frontmatter 为 `{ title: "Hello" }` 的 `content/posts/hello.mdx`,
+首次 `build()` 大致会生成:
+
+```text
+.amamo-mdx/
+  collections.mjs
+  collections.d.mts
+  index.json
+  public.json
+  server.json
+  cache/
+```
+
+- `collections.mjs` 和 `collections.d.mts` 把编译好的文档作为普通 ES 模块暴露给宿主应用。
+- `index.json` 是私有加载器索引,Vite 和 Next 适配器用它在不经过公开模块的前提下,把路径
+  解析到编译好的记录。
+- `public.json` 和 `server.json` 是配置的 manifest。
+- `cache/` 保存内容寻址的编译记录。
+
+## 继续阅读
+
+- 想了解每个键的含义与默认值,看[配置](/zh-CN/configuration/)。
+- 想自己驱动编译器而不是用适配器,看[编译器 API](/zh-CN/compiler-api/)。
+- 在加入任何不应进入打包产物的字段之前,先看[安全模型](/zh-CN/security/)。

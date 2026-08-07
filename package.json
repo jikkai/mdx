@@ -38,6 +38,8 @@
     "build:native": "napi build --platform --output-dir . --no-js --dts native.d.ts",
     "build:ts": "tsc -p tsconfig.json",
     "build": "pnpm run build:native && pnpm run build:ts",
+    "docs:dev": "pnpm --filter @amamo/mdx-docs dev",
+    "docs:build": "pnpm --filter @amamo/mdx-docs build",
     "format": "oxfmt . && cargo fmt",
     "format:check": "oxfmt --check . && cargo fmt --check",
     "lint": "oxlint .",
@@ -46,7 +48,8 @@
     "test": "pnpm run build && vitest run src/__tests__",
     "test:rust": "cargo test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "pnpm run format:check && pnpm run lint && cargo clippy --all-targets -- -D warnings && cargo test && pnpm run typecheck && pnpm run test",
+    "check": "pnpm run format:check && pnpm run lint && cargo clippy --all-targets -- -D warnings && cargo test && pnpm run typecheck && pnpm run test && pnpm run check:docs",
+    "check:docs": "pnpm --filter @amamo/mdx-docs types:check && pnpm --filter @amamo/mdx-docs build",
     "release": "verso"
   },
   "dependencies": {

@@ -1,0 +1,72 @@
+---
+title: Next 16
+description: 把 @amamo/mdx/next 加进 Next 配置,复用 Vite 项目使用的同一份编译器。
+order: 6
+---
+
+Next 包装器为 Turbopack 与可选的 Webpack 路径注册了同一份私有只读加载器。配置包装器会
+await 你已有的 Next config 函数,因此可以和应用本身其它配置组合使用。
+
+## 安装与配置
+
+```sh
+pnpm add @amamo/mdx
+```
+
+```js
+// next.config.mjs
+import { withAmamoMdx } from '@amamo/mdx/next'
+import amamo from './amamo.config.js'
+
+export default withAmamoMdx(amamo)({ reactStrictMode: true })
+```
+
+`withAmamoMdx(config)(nextConfig)` 返回归一化后的 Next config。可以传一个对象、一个
+`NextConfig`,或一个返回 `NextConfig` 的函数;包装器会 await 结果再合并,然后再加 MDX 加载
+器。
+
+## 加载器如何注册
+
+包装器把同一份私有加载器注册两次:
+
+- 默认 Turbopack 路径:`turbopack.rules['*.mdx']`。
+- 显式选择 Webpack 的项目:`webpack.module.rules`。
+
+加载器带两个选项注册:配置指纹与私有加载器索引的路径。配置指纹让加载器的行为与编译器
+写入的内容保持一致;索引让加载器在不走公开集合模块的前提下,通过文件路径查找已编译的记录。
+
+## 启动与监听
+
+无论 `next dev` 还是 `next build` 触发多少次,包装器都只跑一次 `build()`。在 `next dev`
+中,首次 build 完成后会启动文件监听;在 `next build` 中监听保持空闲。用除了
+`PHASE_DEVELOPMENT_SERVER` 和 `PHASE_PRODUCTION_BUILD` 之外的 phase 调用包装器是 no-op。
+
+## 与已有配置组合
+
+```js
+// next.config.mjs
+import { withAmamoMdx } from '@amamo/mdx/next'
+import amamo from './amamo.config.js'
+
+export default withAmamoMdx(amamo)(async (phase, { defaultConfig }) => {
+  return {
+    ...defaultConfig,
+    images: { remotePatterns: [{ hostname: 'cdn.example' }] },
+  }
+})
+```
+
+包装器 await 该函数,把归一化后的 config 交给 Next。如果函数返回了 `webpack` 字段,包装器
+会保留它,并在自己加的 MDX rule 之上叠加。
+
+## Turbopack 与 Webpack 同时存在
+
+两条路径下的加载器共享同一份编译记录。从 Turbopack 切到 Webpack(或反过来)不会让缓存失效;
+同时使用两种表面的项目(比如 Turbopack 主应用 + 只支持 Webpack 的 edge runtime)都从同一
+份 `index.json` 读数据。
+
+## 加载器不会做的事
+
+- 不处理 `*.mdx` 之外的文件。其它文件类型走宿主应用自己的配置。
+- 不读也不写公开集合模块。公开模块给应用代码用,私有加载器给打包器用。
+- 不会感知新增的集合。改完 `amamo.config.ts` 后请重启 dev server。

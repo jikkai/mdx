@@ -1,0 +1,71 @@
+---
+title: Vite 8
+description: Add @amamo/mdx/vite to a Vite config and let the plugin drive the compiler.
+order: 5
+---
+
+The Vite plugin is the easiest way to wire `@amamo/mdx` into a Vite 8 application. The plugin
+joins every Vite environment onto one startup build, runs the same `ICompiler` the root API
+exposes, and reuses Vite's own watcher for add, change, and delete events.
+
+## Install and configure
+
+```sh
+pnpm add @amamo/mdx
+```
+
+```ts
+// vite.config.ts
+import { defineConfig } from 'vite'
+import { amamoMdx } from '@amamo/mdx/vite'
+import amamo from './amamo.config.js'
+
+export default defineConfig({ plugins: [amamoMdx(amamo)] })
+```
+
+`amamoMdx` returns a regular Vite plugin. It declares `enforce: 'pre'` so it runs before any other
+transform, and `sharedDuringBuild: true` so every environment can share the same compiled
+records.
+
+## How it fits into a multi-environment build
+
+Vite 8 commonly splits a project into client, ssr, and other environments. The plugin does not
+care which environment requested the compile — it runs the compile exactly once on first use, and
+every environment that subsequently asks for the same document gets the cached result. Calling
+`build()` twice in a row is also coalesced inside the compiler.
+
+## How it watches files
+
+The plugin uses Vite's `configureServer` hook. It hooks `add`, `change`, and `unlink` on
+`server.watcher` and:
+
+- For `add` and `change`, calls `compiler.transform(file)` and invalidates the generated
+  collection module if any output bytes changed.
+- For `unlink`, calls `compiler.remove(file)` and invalidates the module the same way.
+
+Invalidation triggers a full-reload hot update. The plugin does not currently emit a granular
+HMR boundary; the unit of refresh is "the collection module changed, so the app re-runs".
+
+## Transforming imports
+
+When the host application imports an MDX file, the plugin transforms it through the compiler and
+returns the compiled JavaScript as the module body. The compiler strips sensitive fields, resolves
+media URLs, and renders code blocks before the JavaScript is handed back to Vite.
+
+## Disposal
+
+The plugin disposes its compiler when the dev server's HTTP server emits `close`. Calling
+`dispose` is idempotent; the plugin also short-circuits disposal on a plugin instance that never
+constructed a compiler.
+
+## Production builds
+
+The plugin runs the same startup build for `vite build`. The compiled records are written to
+`generatedDirectory` and the application's own bundler picks up the generated module from
+`<generatedDirectory>/collections.mjs` through whatever import the host application uses.
+
+## Inspecting a build
+
+The Vite plugin does not log build output by itself. To see `discovered`, `compiled`, `cached`,
+and `outputsWritten`, call `build()` from a script and log the result, or wire your own reporter
+in `vite.config.ts`.

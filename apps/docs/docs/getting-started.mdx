@@ -1,0 +1,125 @@
+---
+title: Getting started
+description: Install @amamo/mdx, write a config, run a build, and inspect the generated output.
+order: 2
+---
+
+## Requirements
+
+- **Node.js 20.19 or newer** — the package and its native binding are tested against this floor.
+- **A supported target platform** — `@amamo/mdx` ships prebuilt native binaries for a small set of
+  targets and refuses to load on anything else. See [Native targets](/native-targets/).
+- **Trusted authors** — MDX can contain executable JavaScript. The compiler is not a sandbox.
+
+## Install
+
+```sh
+pnpm add @amamo/mdx
+```
+
+A platform-matching native binding is installed through `optionalDependencies`. There is no
+JavaScript or WASI fallback; on an unsupported target the binding fails to load.
+
+## Write a config
+
+Configuration is plain serializable data. Functions and executable plugins are intentionally
+rejected so a config can be cached, hashed, and reproduced by anyone.
+
+```ts
+// amamo.config.ts
+import { defineConfig } from '@amamo/mdx'
+
+export default defineConfig({
+  root: import.meta.dirname,
+  collections: {
+    posts: {
+      directory: 'content/posts',
+      schema: {
+        $schema: 'https://json-schema.org/draft/2020-12/schema',
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          password: { type: 'string' },
+        },
+        required: ['title'],
+      },
+      sensitive: ['password'],
+    },
+  },
+  highlight: {
+    provider: 'shiki',
+    engine: 'oniguruma',
+    themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+    unknownLanguage: 'plain',
+  },
+  media: { missing: 'warn' },
+  manifests: {
+    public: {
+      output: '.amamo-mdx/public.json',
+      fields: { key: 'key', title: 'title' },
+    },
+    server: {
+      output: '.amamo-mdx/server.json',
+      key: 'key',
+      fields: {
+        key: 'key',
+        protected: { from: 'password', transform: 'exists' },
+        passwordHash: { from: 'password', transform: 'sha256' },
+      },
+    },
+  },
+})
+```
+
+The config captures a few distinct concerns at a glance:
+
+- `collections` declares which directories hold content and how it is validated.
+- `highlight` controls the syntax highlighter.
+- `media` decides what happens when a referenced image, video, or source file is missing.
+- `manifests` projects the validated records into JSON files the host application can read.
+
+`defineConfig` is a type-level helper only; it returns the input unchanged.
+
+## Compile
+
+```ts
+import { createCompiler } from '@amamo/mdx'
+import config from './amamo.config.js'
+
+const compiler = await createCompiler(config)
+await compiler.build()
+await compiler.dispose()
+```
+
+`build()` writes the generated module, its declaration, the private loader index, and the
+configured manifests to the directory specified by `generatedDirectory` (default
+`.amamo-mdx/`). Unchanged bytes are not rewritten.
+
+## What gets written
+
+For the config above and a `content/posts/hello.mdx` with frontmatter `{ title: "Hello" }`, the
+first `build()` produces roughly:
+
+```text
+.amamo-mdx/
+  collections.mjs
+  collections.d.mts
+  index.json
+  public.json
+  server.json
+  cache/
+```
+
+- `collections.mjs` and `collections.d.mts` expose the compiled documents as a regular ES module
+  for the host application.
+- `index.json` is the private loader index used by the Vite and Next adapters to resolve a path
+  to a compiled record without going through the public module.
+- `public.json` and `server.json` are the configured manifests.
+- `cache/` holds the content-addressed compilation records.
+
+## Continue
+
+- Read [Configuration](/configuration/) to learn what each key controls and what its defaults are.
+- Read [Compiler API](/compiler-api/) if you want to drive the compiler yourself instead of using
+  an adapter.
+- Read [Security](/security/) before adding any field that should not appear in shipped bundles.

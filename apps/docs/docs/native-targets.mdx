@@ -1,0 +1,58 @@
+---
+title: Native targets
+description: The list of prebuilt native binaries and what happens on an unsupported target.
+order: 8
+---
+
+`@amamo/mdx` ships a prebuilt native binding for every platform it supports. The binding is
+installed through `optionalDependencies`; an unsupported platform skips the install and the
+package refuses to load when `createCompiler` is called.
+
+## Supported targets
+
+| Target triple                | OS      | Architecture  |
+| ---------------------------- | ------- | ------------- |
+| `aarch64-apple-darwin`       | macOS   | arm64         |
+| `x86_64-apple-darwin`        | macOS   | x64           |
+| `aarch64-unknown-linux-gnu`  | Linux   | arm64 (glibc) |
+| `x86_64-unknown-linux-gnu`   | Linux   | x64 (glibc)   |
+| `aarch64-unknown-linux-musl` | Linux   | arm64 (musl)  |
+| `x86_64-unknown-linux-musl`  | Linux   | x64 (musl)    |
+| `x86_64-pc-windows-msvc`     | Windows | x64           |
+
+The CI matrix builds every target on its native runner. The macOS x64 build uses an Intel
+runner; the Linux musl builds cross-compile through `cargo-zigbuild` and a pinned Zig
+toolchain.
+
+## What happens on an unsupported target
+
+`createCompiler` calls into the native binding at construction time. If the binding is missing
+or fails to load, the call rejects. There is no JavaScript or WASI fallback, and there is no
+flag to opt into one — adding a fallback would change the perf and language-coverage story,
+and that is a decision we do not want to make by default.
+
+When you ship a native package, pick a supported target triple in the `napi.targets` array and
+let the napi CLI build the right binding for the host.
+
+## Required Node.js
+
+The package is tested on Node.js 20.19 and newer. Older Node.js releases miss the async
+hooks and the `node:fs/promises` semantics the compiler relies on.
+
+## Picking a highlighter engine
+
+The native binding is the same on every target. The highlighter engine is a separate choice:
+
+- `oniguruma` — the default. The Shiki WASM engine, full grammar fidelity, slightly larger
+  startup cost.
+- `javascript` — the Shiki JavaScript engine. Lighter startup, smaller language set.
+
+Set the engine in the `highlight` block of the config. Both engines produce the same output for
+every language they share; the difference is grammar coverage, not correctness.
+
+## Building a custom target
+
+The native binding is a regular napi-rs project. To build a target that is not in the table
+above, run the napi build with a custom `--target` flag. The CI matrix is the source of truth
+for what works in practice; ports to new targets should be validated by running `cargo test`
+on the target machine before publishing.

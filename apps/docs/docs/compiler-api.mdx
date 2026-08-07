@@ -1,0 +1,145 @@
+---
+title: Compiler API
+description: Drive the compiler directly with createCompiler, build, transform, remove, and dispose.
+order: 4
+---
+
+The Vite and Next adapters both run on top of the same `ICompiler`. The root API exposes that
+interface so a host application can drive the compiler directly — for example, a build script
+that runs before Vite, a test harness, or a static site generator.
+
+## Construction
+
+```ts
+import { createCompiler } from '@amamo/mdx'
+import config from './amamo.config.js'
+
+const compiler = await createCompiler(config)
+```
+
+`createCompiler` is async because it loads the native binding and the configured highlighter. The
+config is normalized on construction; later edits are not picked up.
+
+The returned object implements `ICompiler`:
+
+```ts
+interface ICompiler {
+  build(): Promise<IBuildResult>
+  dispose(): Promise<void>
+  remove(file: string): Promise<number>
+  transform(file: string): Promise<ITransformResult>
+}
+```
+
+## build
+
+```ts
+const result = await compiler.build()
+```
+
+Discovers every collection, parses and validates every record, renders code blocks, prunes the
+cache, and writes the generated module, the private loader index, and every configured manifest.
+The compiler coalesces concurrent calls, so calling `build()` twice in quick succession is safe.
+
+```ts
+interface IBuildResult {
+  cached: number
+  compiled: number
+  discovered: number
+  outputsWritten: number
+}
+```
+
+- `discovered` is the number of MDX files found across all collections.
+- `compiled` is the number of files that produced fresh cache records.
+- `cached` is `discovered - compiled`.
+- `outputsWritten` is the number of generated files actually written; the rest were byte-for-byte
+  identical to the existing output and left untouched.
+
+`build()` is a superset of the work the adapters do at startup. Calling it explicitly is useful
+when the generated module is consumed by code that is not the Vite or Next adapter.
+
+## transform
+
+```ts
+const result = await compiler.transform('content/posts/hello.mdx')
+```
+
+Re-parses a single file, validates its frontmatter, and writes any new generated output that
+depends on it. The result is the freshly compiled record and a `cached` flag that mirrors the
+cache behavior of the underlying batch.
+
+```ts
+interface ITransformResult {
+  cached: boolean
+  code: string
+  map: null
+  outputsWritten: number
+  record: IDocumentRecord
+}
+```
+
+`code` is the JavaScript source the host application should treat as the document's module body.
+`map` is currently always `null`; the compiler reserves the field for a future source map. The
+full `record` exposes the parsed frontmatter, the derived fields, the diagnostics, the cache key,
+and the SHA-256 hash of the input bytes.
+
+`transform` rejects with an `AmamoMdxError` whose `diagnostics` field lists every problem the
+compiler found. Frontmatter schema violations, missing media, and unknown code-block languages all
+surface as diagnostics.
+
+## remove
+
+```ts
+const removed = await compiler.remove('content/posts/deleted.mdx')
+```
+
+Removes a file from the cache and rewrites any generated output that referenced it. Returns the
+number of generated files actually rewritten. Calling `remove` on a path that is not part of any
+collection is a no-op and returns `0`.
+
+`remove` is the delete-side counterpart of `transform`. The Vite and Next adapters wire it to the
+underlying file system watcher.
+
+## dispose
+
+```ts
+await compiler.dispose()
+```
+
+Releases the highlighter and any open file handles. After `dispose`, the compiler is unusable;
+calling any other method rejects. The compiler is also a process-wide singleton from the adapter's
+point of view, so do not share a disposed instance across requests.
+
+## Errors and diagnostics
+
+Most failures are not thrown as JavaScript exceptions; they are returned as `IDiagnostic[]`
+inside an `AmamoMdxError`:
+
+```ts
+class AmamoMdxError extends Error {
+  readonly diagnostics: IDiagnostic[]
+}
+
+interface IDiagnostic {
+  code: string
+  file?: string
+  hint?: string
+  message: string
+  range?: { start; end }
+  severity: 'error' | 'warning'
+}
+```
+
+The compiler's own plumbing rejects the surrounding `Promise`; it is the caller's job to decide
+whether to surface a single message, a list of file:line diagnostics, or to fail the build.
+
+## Generated module
+
+After `build()` the generated module lives at `<generatedDirectory>/collections.mjs`. It exports
+a tree of named records that the host application can `import` directly. The companion
+`collections.d.mts` provides the same shape to TypeScript.
+
+The private loader index at `<generatedDirectory>/index.json` exposes the same records to the Vite
+and Next adapters without forcing them through the public module — they need a key lookup, not
+the full bundle.

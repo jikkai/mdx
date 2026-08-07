@@ -1,0 +1,87 @@
+---
+title: Security model
+description: What sensitive fields cover, how path containment is enforced, and what manifest projections can and cannot read.
+order: 7
+---
+
+MDX can contain executable JavaScript. `@amamo/mdx` compiles it, but it does not sandbox it.
+Schema validation is not a sandbox. The package makes a small number of guarantees that are
+enforced by construction; this page lists them.
+
+## Trusted authors
+
+Compile only content from authors you trust. The compiler is happy to run an MDX file that
+contains `import { exec } from 'node:child_process'`, calls `fetch` to a private endpoint, or
+evaluates arbitrary expressions in `{...}` blocks. There is no allowlist of safe MDX and no
+runtime taint tracking.
+
+## Sensitive fields
+
+Mark any field that should not appear in shipped bundles as `sensitive` on its collection:
+
+```ts
+collections: {
+  posts: {
+    directory: 'content/posts',
+    schema: { /* ... */ },
+    sensitive: ['password', 'internalNotes'],
+  },
+}
+```
+
+Sensitive fields are removed before the compiler writes anything to disk. The cache record, the
+generated module, the private loader index, and every public manifest all see the field stripped
+from the start. There is no flag that re-enables plaintext access.
+
+## Manifest projections
+
+A manifest field projection can read a sensitive source only as `'exists'` or `'sha256'`:
+
+```ts
+manifests: {
+  server: {
+    output: '.amamo-mdx/server.json',
+    fields: {
+      key: 'key',
+      protected: { from: 'password', transform: 'exists' },
+      passwordHash: { from: 'password', transform: 'sha256' },
+    },
+  },
+}
+```
+
+`'exists'` emits `true` or `false` based on whether the source field was present. `'sha256'`
+emits a hex SHA-256 of the source. Anything else — including a direct string copy — is
+rejected. The compiler is the only thing that ever sees the plaintext, and it discards the
+field the moment the validation pass completes.
+
+This is how a server-side password check works: the host application receives a hash, runs
+its own hash on the user's input, and compares. The plaintext never leaves the compiler.
+
+## Path containment
+
+Relative media URLs are resolved against the containing MDX file, then checked against the
+configured `root`. URLs that resolve outside the root — even via a symlink — are rejected. The
+compiler does not follow a relative path past `root`, and it does not let a path start with `/`
+or `..` to escape containment.
+
+## Cache writes
+
+Compiled records and the highlighter cache are written through the same-directory temporary
+file + atomic rename pattern. A reader that opens the cache during a write either sees the
+previous file or the new file, never a half-written file. The cache directory itself lives
+under `generatedDirectory`; the host application can place `generatedDirectory` on a tmpfs or
+exclude it from backups without any other changes.
+
+## Plain-data config
+
+The config is restricted to plain serializable data. Functions, class instances, symbol keys,
+and cycles are rejected at construction time. The fingerprint is computed over this plain-data
+shape, so two configs that produce the same normalized form produce the same cache records —
+even if one of them reorders an object's keys.
+
+## Diagnostics
+
+When a build fails for security-relevant reasons, the diagnostic is intentionally specific:
+it names the field, the collection, and the path. A diagnostic never includes the value of a
+sensitive field.
