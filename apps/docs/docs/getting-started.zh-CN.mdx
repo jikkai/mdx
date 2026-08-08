@@ -1,15 +1,18 @@
 ---
-title: 快速开始
-description: 安装 @amamo/mdx、编写配置、执行编译,并查看生成产物。
-order: 2
+description: 安装 @amamo/mdx，定义一个集合，编译一篇文档并使用生成产物。
 ---
 
-## 运行条件
+# 快速开始
 
-- **Node.js 20.19 或更高版本** —— 包及其原生绑定按此最低版本测试。
-- **受支持的目标平台** —— `@amamo/mdx` 为一组目标预编译原生二进制,其它平台直接拒绝加载。
-  详见[原生目标](/zh-CN/native-targets/)。
-- **可信作者** —— MDX 中可以包含可执行 JavaScript。编译器不是沙箱。
+本指南从一个 `content/posts/hello.mdx` 文件开始，最终得到宿主可 import 的模块、集合注册表
+和配套声明文件。
+
+## 要求
+
+- **Node.js 20.19 或更新版本。** 这是包声明的最低引擎版本；项目 CI 目前使用 Node.js 24。
+- **受支持的原生目标。** 绑定没有 JavaScript 或 WASI 回退，详见[原生目标](/zh-CN/native-targets/)。
+- **宿主应用使用 React 19。** 默认 `jsxImportSource` 是 `react`。
+- **MDX 作者可信。** 编译后的 MDX 可以在宿主应用中执行 JavaScript。
 
 ## 安装
 
@@ -17,16 +20,32 @@ order: 2
 pnpm add @amamo/mdx
 ```
 
-匹配当前平台的原生绑定会通过 `optionalDependencies` 自动安装。不提供 JavaScript 或 WASI
-回退;在不支持的目标上绑定加载会失败。
+发布的根包会在安装时选择匹配的平台包。不要在不同操作系统、CPU 架构或 Linux libc 之间
+复制 `node_modules`。
 
-## 编写配置
+## 添加文档
 
-配置只能是纯可序列化数据。函数和可执行插件被刻意拒绝,这样一份配置才能被任何人缓存、哈希并
-复现。
+创建集合目录和第一篇文档：
 
-```ts
-// amamo.config.ts
+```mdx
+---
+title: 你好
+---
+
+# 你好
+
+这篇文档由 @amamo/mdx 编译。
+```
+
+将它保存为 `content/posts/hello.mdx`。
+
+## 定义集合
+
+配置必须是可序列化的纯数据。`defineConfig` 是向支持 TypeScript 的工具暴露配置类型的恒等
+辅助函数；创建编译器或适配器时才会执行校验并应用默认值。
+
+```js
+// amamo.config.mjs
 import { defineConfig } from '@amamo/mdx'
 
 export default defineConfig({
@@ -37,86 +56,132 @@ export default defineConfig({
       schema: {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
-        properties: {
-          title: { type: 'string' },
-          password: { type: 'string' },
-        },
+        properties: { title: { type: 'string' } },
         required: ['title'],
       },
-      sensitive: ['password'],
     },
   },
-  highlight: {
-    provider: 'shiki',
-    engine: 'oniguruma',
-    themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
-    unknownLanguage: 'plain',
-  },
-  media: { missing: 'warn' },
   manifests: {
     public: {
       output: '.amamo-mdx/public.json',
-      fields: { key: 'key', title: 'title' },
-    },
-    server: {
-      output: '.amamo-mdx/server.json',
-      key: 'key',
       fields: {
         key: 'key',
-        protected: { from: 'password', transform: 'exists' },
-        passwordHash: { from: 'password', transform: 'sha256' },
+        slug: 'slug',
+        title: 'title',
       },
     },
   },
 })
 ```
 
-这份配置一眼能看出几个关注点:
+完整构建开始前，`content/posts` 目录必须存在。集合、缓存、生成目录和 manifest 的相对路径
+都从 `root` 解析。
 
-- `collections` 声明哪些目录放内容,以及如何校验。
-- `highlight` 控制语法高亮器。
-- `media` 决定引用到的图片、视频或源文件缺失时怎么办。
-- `manifests` 把校验过的记录投影成宿主应用可以读的 JSON 文件。
+## 选择由谁管理构建
 
-`defineConfig` 只在类型层面打注解,原样返回入参。
-
-## 编译
+### Vite
 
 ```ts
-import { createCompiler } from '@amamo/mdx'
-import config from './amamo.config.js'
+// vite.config.ts
+import { amamoMdx } from '@amamo/mdx/vite'
+import { defineConfig } from 'vite'
 
-const compiler = await createCompiler(config)
-await compiler.build()
-await compiler.dispose()
+import amamo from './amamo.config.mjs'
+
+export default defineConfig({ plugins: [amamoMdx(amamo)] })
 ```
 
-`build()` 把生成模块、它的声明文件、私有加载器索引,以及所有配置的 manifest 写入
-`generatedDirectory` 指定的目录(默认 `.amamo-mdx/`)。字节未变的文件不会被重写。
+Vite 会执行一次完整的启动构建，直接转换被 import 的内容，并通过自己的 watcher 处理新增、
+修改和删除事件。
 
-## 产物
+### Next
 
-对于上面的配置和一篇 frontmatter 为 `{ title: "Hello" }` 的 `content/posts/hello.mdx`,
-首次 `build()` 大致会生成:
+```ts
+// next.config.ts
+import { withAmamoMdx } from '@amamo/mdx/next'
+
+import amamo from './amamo.config.mjs'
+
+export default withAmamoMdx(amamo)({ reactStrictMode: true })
+```
+
+Next 会在开发或生产打包前构建持久化缓存，再为 Turbopack 和 Webpack 注册只读 loader。使用
+这个适配器时必须保持缓存启用。
+
+### 直接 API
+
+```js
+// build-content.mjs
+import { createCompiler } from '@amamo/mdx'
+
+import amamo from './amamo.config.mjs'
+
+const compiler = await createCompiler(amamo)
+try {
+  const result = await compiler.build()
+  console.log(result)
+} finally {
+  await compiler.dispose()
+}
+```
+
+运行这个脚本：
+
+```sh
+node build-content.mjs
+```
+
+如果生成产物必须表示整个集合，请在 `transform()` 或 `remove()` 前先调用 `build()`。增量方法
+只更新编译器当前的内存记录集，不会自行发现未出现的同级文档。
+
+## 导入内容
+
+在已配置的 Vite 或 Next 应用中，可以像模块一样导入 MDX：
+
+```tsx
+import Post, { frontmatter } from './content/posts/hello.mdx'
+
+export function Page() {
+  return (
+    <main>
+      <h1>{frontmatter.title}</h1>
+      <Post />
+    </main>
+  )
+}
+```
+
+也可以在应用代码中导入生成的集合注册表：
+
+```ts
+import { collections } from './.amamo-mdx/collections.mjs'
+
+const hello = collections.posts.find((document) => document.slug === 'hello')
+const module = await hello?.load()
+```
+
+`load()` 会 import 原始 MDX 路径，因此它必须运行在已经配置 Vite 插件或 Next loader 的宿主中。
+
+## 生成文件
+
+使用上面的配置，第一次构建会写出：
 
 ```text
 .amamo-mdx/
+  cache/
+  collections.d.ts
   collections.mjs
-  collections.d.mts
   index.json
   public.json
-  server.json
-  cache/
 ```
 
-- `collections.mjs` 和 `collections.d.mts` 把编译好的文档作为普通 ES 模块暴露给宿主应用。
-- `index.json` 是私有加载器索引,Vite 和 Next 适配器用它在不经过公开模块的前提下,把路径
-  解析到编译好的记录。
-- `public.json` 和 `server.json` 是配置的 manifest。
-- `cache/` 保存内容寻址的编译记录。
+- `collections.mjs` 包含排序后的元数据和延迟 import。
+- `collections.d.ts` 是集合注册表的配套声明文件。
+- `index.json` 把源码路径映射到 Next loader 使用的缓存记录；Vite 不读取它。
+- `cache/` 保存可复用的编译记录，其中已经包含高亮结果。
+- `public.json` 是配置的 manifest；不同的 `output` 可以把 manifest 放到其它位置。
 
-## 继续阅读
+把 `.amamo-mdx/` 加入宿主仓库的忽略文件。字节未变化的共享文件和 manifest 不会被重写。
 
-- 想了解每个键的含义与默认值,看[配置](/zh-CN/configuration/)。
-- 想自己驱动编译器而不是用适配器,看[编译器 API](/zh-CN/compiler-api/)。
-- 在加入任何不应进入打包产物的字段之前,先看[安全模型](/zh-CN/security/)。
+接下来阅读[配置参考](/zh-CN/configuration/)了解全部默认值，或在添加敏感 frontmatter 前阅读
+[安全模型](/zh-CN/security/)。

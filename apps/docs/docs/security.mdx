@@ -1,87 +1,122 @@
 ---
-title: Security model
-description: What sensitive fields cover, how path containment is enforced, and what manifest projections can and cannot read.
-order: 7
+description: The actual trust boundary for executable MDX, sensitive frontmatter, diagnostics, media paths, manifests, and cached output.
 ---
 
-MDX can contain executable JavaScript. `@amamo/mdx` compiles it, but it does not sandbox it.
-Schema validation is not a sandbox. The package makes a small number of guarantees that are
-enforced by construction; this page lists them.
+# Security model
 
-## Trusted authors
+`@amamo/mdx` protects specific build outputs; it does not make untrusted MDX safe. Treat the author,
+configuration module, generated files, and deployment destination as separate trust boundaries.
 
-Compile only content from authors you trust. The compiler is happy to run an MDX file that
-contains `import { exec } from 'node:child_process'`, calls `fetch` to a private endpoint, or
-evaluates arbitrary expressions in `{...}` blocks. There is no allowlist of safe MDX and no
-runtime taint tracking.
+## MDX is executable
 
-## Sensitive fields
+MDX can contain ESM imports and JavaScript expressions. The compiler emits them into a JavaScript
+module, and the host may execute that code during bundling, import, server rendering, or client
+rendering.
 
-Mark any field that should not appear in shipped bundles as `sensitive` on its collection:
+Compile only content from authors you trust to run code with the host application's privileges.
+JSON Schema validates frontmatter data; it does not inspect or sandbox the MDX program.
+
+## Sensitive frontmatter
+
+Declare top-level fields that must not enter successful compiled output:
 
 ```ts
 collections: {
   posts: {
     directory: 'content/posts',
     schema: { /* ... */ },
-    sensitive: ['password', 'internalNotes'],
+    sensitive: ['accessToken', 'internalNotes'],
   },
 }
 ```
 
-Sensitive fields are removed before the compiler writes anything to disk. The cache record, the
-generated module, the private loader index, and every public manifest all see the field stripped
-from the start. There is no flag that re-enables plaintext access.
+The successful compilation path is:
+
+1. Parse all YAML frontmatter.
+2. Apply schema defaults and validate the complete object.
+3. Move each named top-level sensitive field out of public frontmatter.
+4. Compute only explicitly allowed manifest projections.
+5. Emit modules, records, and manifests without the plaintext sensitive values.
+
+`sensitive` names are top-level only. Naming `credentials` does not separately classify nested
+`credentials.password`; the entire top-level `credentials` value is removed.
+
+## Diagnostics can contain submitted values
+
+Schema validation runs before sensitive fields are removed, and validator messages may quote the
+invalid value. Do not return raw compiler errors or build logs to an untrusted author merely because
+the field is listed in `sensitive`.
+
+Successful warning diagnostics are stored on the document record. The compiler and Vite plugin do
+not automatically log them, so the caller controls where they are exposed.
 
 ## Manifest projections
 
-A manifest field projection can read a sensitive source only as `'exists'` or `'sha256'`:
+A sensitive source can only use these transforms:
 
 ```ts
-manifests: {
-  server: {
-    output: '.amamo-mdx/server.json',
-    fields: {
-      key: 'key',
-      protected: { from: 'password', transform: 'exists' },
-      passwordHash: { from: 'password', transform: 'sha256' },
-    },
-  },
+fields: {
+  tokenPresent: { from: 'accessToken', transform: 'exists' },
+  tokenFingerprint: { from: 'accessToken', transform: 'sha256' },
 }
 ```
 
-`'exists'` emits `true` or `false` based on whether the source field was present. `'sha256'`
-emits a hex SHA-256 of the source. Anything else — including a direct string copy — is
-rejected. The compiler is the only thing that ever sees the plaintext, and it discards the
-field the moment the validation pass completes.
+- `exists` reveals only whether the value is present and non-null.
+- `sha256` emits a deterministic, unsalted digest.
 
-This is how a server-side password check works: the host application receives a hash, runs
-its own hash on the user's input, and compares. The plaintext never leaves the compiler.
+Raw SHA-256 is not a password hashing function. Do not use this projection to store or verify human
+passwords; use a dedicated password KDF and authentication system in the host. A deterministic
+digest may be suitable only for a sufficiently high-entropy value when equality leakage is
+acceptable.
 
-## Path containment
+Manifest names such as `public` or `server` carry no access-control semantics. The compiler writes
+the configured file; your deployment must decide whether that path is public.
 
-Relative media URLs are resolved against the containing MDX file, then checked against the
-configured `root`. URLs that resolve outside the root — even via a symlink — are rejected. The
-compiler does not follow a relative path past `root`, and it does not let a path start with `/`
-or `..` to escape containment.
+## Markdown media containment
 
-## Cache writes
+On a fresh compilation, relative media generated from Markdown is normalized against the source
+file, checked against `root`, canonicalized when it exists, and rejected if a symlink resolves
+outside the canonical root. External, absolute, fragment, protocol-relative, and data URLs pass
+through without this local-file check. Authored MDX JSX is not rewritten.
 
-Compiled records and the highlighter cache are written through the same-directory temporary
-file + atomic rename pattern. A reader that opens the cache during a write either sees the
-previous file or the new file, never a half-written file. The cache directory itself lives
-under `generatedDirectory`; the host application can place `generatedDirectory` on a tmpfs or
-exclude it from backups without any other changes.
+A warm cache hit checks that the dependency path recorded by the earlier compile still exists. It
+does not recanonicalize a media symlink whose target changed while the MDX source and config stayed
+unchanged. After changing symlink targets, remove the affected cache or run with caching disabled
+while the target may change. A single cache-disabled build checks fresh paths but does not replace
+the old cache entry.
 
-## Plain-data config
+The manifest-only `mediaUrl` transform is different: it lexically maps a relative value to a
+root-relative URL. It neither checks file existence nor creates an import.
 
-The config is restricted to plain serializable data. Functions, class instances, symbol keys,
-and cycles are rejected at construction time. The fingerprint is computed over this plain-data
-shape, so two configs that produce the same normalized form produce the same cache records —
-even if one of them reorders an object's keys.
+## Configuration is data after import
 
-## Diagnostics
+Normalization rejects functions, accessors, symbols, class instances, cycles, non-finite numbers,
+and other non-JSON-like values. This makes the normalized value reproducible enough to fingerprint,
+but it does not sandbox the JavaScript or TypeScript configuration module that creates that value.
 
-When a build fails for security-relevant reasons, the diagnostic is intentionally specific:
-it names the field, the collection, and the path. A diagnostic never includes the value of a
-sensitive field.
+Fingerprints use serialized normalized data. Object key order therefore affects the fingerprint and
+may produce a cache miss even when two objects are otherwise equivalent.
+
+## Cache and output writes
+
+Cache records contain public frontmatter, derived data, safe projections, dependencies, diagnostics,
+and the compiled module. They do not contain plaintext sensitive fields. Highlighted output is part
+of the same record; there is no separate disk highlighter cache.
+
+Cache, manifests, and the three shared generated files may live in different configured directories.
+Protect those paths according to their contents instead of assuming everything is under
+`generatedDirectory`.
+
+Shared generated files and manifests compare existing bytes before writing. They and cache records
+use same-directory temporary files plus rename for complete-file replacement; cache records do not
+run the TypeScript byte comparison. Readers should see the old complete file or the new complete
+file rather than a partially written record.
+
+## Deployment checklist
+
+- Only trusted authors can change MDX or its imports.
+- Sensitive top-level fields are listed and covered by regression tests.
+- Raw validation errors are not exposed to untrusted users.
+- No manifest containing private metadata is deployed to a public path.
+- Symlink target changes force a fresh media compilation.
+- Authentication and password storage remain outside manifest SHA-256 projections.

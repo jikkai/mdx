@@ -9,7 +9,7 @@
     "types:check": "tsc --noEmit"
   },
   "dependencies": {
-    "@amamo/doctrine": "0.1.1",
+    "@amamo/doctrine": "0.2.0",
     "@base-ui/react": "1.7.0",
     "lucide-react": "1.29.0",
     "pagefind": "1.5.2",

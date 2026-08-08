@@ -1,65 +1,63 @@
 ---
-title: '@amamo/mdx'
-description: A native MDX content compiler with a Rust core, official Shiki highlighting, JSON Schema validation, media imports, deterministic manifests, and content-addressed caching.
-order: 1
+description: Compile trusted MDX into JavaScript modules for a configurable JSX runtime, collection metadata, and deterministic JSON manifests.
 ---
 
-`@amamo/mdx` is an MDX content compiler. A Rust core parses MDX, validates frontmatter, compiles
-JSX, and renders code blocks; the same compiler state powers the root API, the Vite 8 plugin, and
-the Next 16 wrapper. The same input, the same output, on every surface.
+# A native MDX content compiler
+
+Give `@amamo/mdx` a directory of MDX files and a JSON Schema. A build validates the frontmatter,
+compiles each document for the configured JSX runtime (React by default), highlights fenced code
+with Shiki, and writes a collection registry, companion declaration, and configured manifests.
 
 ```sh
 pnpm add @amamo/mdx
 ```
 
-<CardGrid>
-  <Card title="Getting started" href="/getting-started/">
-    Install the package, write a config, and compile your first document.
-  </Card>
-  <Card title="Configuration" href="/configuration/">
-    Collections, highlighting, media policies, manifest projections, and the runtime cache.
-  </Card>
-  <Card title="Compiler API" href="/compiler-api/">
-    Build, transform, remove, and dispose the compiler that both adapters share.
-  </Card>
-  <Card title="Security model" href="/security/">
-    Sensitive fields, path containment, and how manifest projections are restricted.
-  </Card>
-</CardGrid>
+## Choose a path
 
-## What it does
+| I want to...                                  | Start here                       |
+| --------------------------------------------- | -------------------------------- |
+| Compile content in a Vite app                 | [Vite 8](/vite/)                 |
+| Import MDX in a Next app                      | [Next 16](/next/)                |
+| Drive builds from my own script               | [Compiler API](/compiler-api/)   |
+| See every config default                      | [Configuration](/configuration/) |
+| Handle private frontmatter or untrusted input | [Security model](/security/)     |
 
-- **Rust core** parses MDX, runs frontmatter through a JSON Schema, and emits JavaScript modules with
-  source-position mappings.
-- **Official Shiki** highlights code blocks. The default engine is the Oniguruma WASM build; the
-  JavaScript engine is also supported.
-- **Media imports** rewrite relative URLs in Markdown into static imports, with attributes derived
-  from the HTML tag.
-- **Deterministic manifests** project the public frontmatter, the protected status, and a
-  content hash for every document.
-- **Content-addressed cache** stores compiled records by a hash of the input bytes, the config
-  fingerprint, and the Shiki version, so unchanged sources are never rewritten.
+## One document through the pipeline
 
-## What it does not do
+```text
+MDX source + serializable config
+  -> TypeScript discovery and operation queue
+  -> Rust: YAML, JSON Schema, MDX tree, media, derived fields
+  -> JavaScript: official Shiki themes, grammars, and engine
+  -> Rust: highlighted module, safe metadata, manifest projections, cache record
+  -> TypeScript: collections.mjs, collections.d.ts, index.json, manifests
+```
 
-- It is not a runtime. The compiler writes JavaScript modules to disk and returns them; rendering
-  is the host's responsibility.
-- It is not a sandbox. MDX can contain executable JavaScript; only compile content from authors you
-  trust.
-- It is not a content management system. Manifests project fields; they do not author them.
+Rust owns parsing, validation, MDX compilation, manifest projection, and persistent records. Shiki
+stays in JavaScript; its highlighted HAST is validated and injected before Rust emits the final
+module. The direct API, Vite plugin, and Next wrapper share this implementation, but each compiler
+or adapter instance owns its own state.
 
-## Three surfaces, one compiler
+## What a build gives you
 
-| Surface  | Import            | Use it when                                                |
-| -------- | ----------------- | ---------------------------------------------------------- |
-| Root API | `@amamo/mdx`      | You want to drive the compiler directly from a script.     |
-| Vite 8   | `@amamo/mdx/vite` | You are building a Vite app that owns its own content.     |
-| Next 16  | `@amamo/mdx/next` | You are building a Next app and want the same content set. |
+- A JavaScript module for every imported MDX document, including `frontmatter` and enabled derived
+  exports.
+- `collections.mjs`, a deterministic registry of document metadata and lazy source imports.
+- `collections.d.ts`, a companion declaration output for the registry.
+- Optional JSON manifests with explicit field projection, sorting, and array or keyed-object output.
+- BLAKE3-addressed cache records so unchanged documents can skip native compilation and Shiki.
 
-The Vite and Next adapters run the same `IAdapterCompiler`; the only difference is who owns the
-file watcher and the generated module.
+Relative media URLs written in Markdown become static imports after fresh-compilation root checks.
+Authored MDX JSX is compiled as part of MDX, but media attributes inside it are not rewritten.
 
-## Where to next
+## Deliberate boundaries
 
-Start with [Getting started](/getting-started/) for an end-to-end first compile, or jump straight
-to [Configuration](/configuration/) if you already know which collections you need.
+- **Trusted content only.** MDX can execute JavaScript when its compiled module is imported or
+  rendered. Schema validation is not a sandbox.
+- **Build-time compiler, not a runtime.** The host imports or renders emitted modules with the
+  configured JSX runtime.
+- **Plain-data configuration.** Functions, class instances, symbols, accessors, cycles, and
+  non-finite numbers are rejected after the config value is loaded.
+- **Native targets only.** There is no JavaScript or WASI fallback. See [Native targets](/native-targets/).
+
+Continue with [Getting started](/getting-started/) for a complete first document.

@@ -1,72 +1,113 @@
 ---
-title: Next 16
-description: 把 @amamo/mdx/next 加进 Next 配置,复用 Vite 项目使用的同一份编译器。
-order: 6
+description: 在 Next 打包前构建持久化 MDX 缓存，再由 Turbopack 或 Webpack 共用的已校验 loader 读取。
 ---
 
-Next 包装器为 Turbopack 与可选的 Webpack 路径注册了同一份私有只读加载器。配置包装器会
-await 你已有的 Next config 函数,因此可以和应用本身其它配置组合使用。
+# Next 16
 
-## 安装与配置
+Next 集成把编译和加载分开。配置包装器先构建内容集；bundler loader 再校验 `index.json`，
+并从对应缓存记录返回编译模块。
 
-```sh
-pnpm add @amamo/mdx
-```
+## 要求
 
-```js
-// next.config.mjs
+- 保持持久化缓存启用。`cache: false` 不会留下 loader 可读取的模块记录。
+- 通过 Next import 的文件使用 `.mdx`。即使集合配置了其它后缀，内置 Turbopack 和 Webpack
+  rule 仍固定为 `*.mdx`。
+- 在[受支持的原生目标](/zh-CN/native-targets/)上运行 `next dev` 和 `next build`。
+
+## 配置 Next
+
+```ts
+// next.config.ts
 import { withAmamoMdx } from '@amamo/mdx/next'
-import amamo from './amamo.config.js'
 
-export default withAmamoMdx(amamo)({ reactStrictMode: true })
-```
+import amamo from './amamo.config.mjs'
 
-`withAmamoMdx(config)(nextConfig)` 返回归一化后的 Next config。可以传一个对象、一个
-`NextConfig`,或一个返回 `NextConfig` 的函数;包装器会 await 结果再合并,然后再加 MDX 加载
-器。
-
-## 加载器如何注册
-
-包装器把同一份私有加载器注册两次:
-
-- 默认 Turbopack 路径:`turbopack.rules['*.mdx']`。
-- 显式选择 Webpack 的项目:`webpack.module.rules`。
-
-加载器带两个选项注册:配置指纹与私有加载器索引的路径。配置指纹让加载器的行为与编译器
-写入的内容保持一致;索引让加载器在不走公开集合模块的前提下,通过文件路径查找已编译的记录。
-
-## 启动与监听
-
-无论 `next dev` 还是 `next build` 触发多少次,包装器都只跑一次 `build()`。在 `next dev`
-中,首次 build 完成后会启动文件监听;在 `next build` 中监听保持空闲。用除了
-`PHASE_DEVELOPMENT_SERVER` 和 `PHASE_PRODUCTION_BUILD` 之外的 phase 调用包装器是 no-op。
-
-## 与已有配置组合
-
-```js
-// next.config.mjs
-import { withAmamoMdx } from '@amamo/mdx/next'
-import amamo from './amamo.config.js'
-
-export default withAmamoMdx(amamo)(async (phase, { defaultConfig }) => {
-  return {
-    ...defaultConfig,
-    images: { remotePatterns: [{ hostname: 'cdn.example' }] },
-  }
+export default withAmamoMdx(amamo)({
+  reactStrictMode: true,
 })
 ```
 
-包装器 await 该函数,把归一化后的 config 交给 Next。如果函数返回了 `webpack` 字段,包装器
-会保留它,并在自己加的 MDX rule 之上叠加。
+`withAmamoMdx(amamo)(nextConfig)` 返回异步 Next config 函数。之后由 Next 使用当前 phase 和
+`{ defaultConfig }` 调用它；它不会立即返回已经解析的配置。
 
-## Turbopack 与 Webpack 同时存在
+内层输入可以是配置对象、Promise 或配置函数：
 
-两条路径下的加载器共享同一份编译记录。从 Turbopack 切到 Webpack(或反过来)不会让缓存失效;
-同时使用两种表面的项目(比如 Turbopack 主应用 + 只支持 Webpack 的 edge runtime)都从同一
-份 `index.json` 读数据。
+```ts
+import { withAmamoMdx } from '@amamo/mdx/next'
 
-## 加载器不会做的事
+import amamo from './amamo.config.mjs'
 
-- 不处理 `*.mdx` 之外的文件。其它文件类型走宿主应用自己的配置。
-- 不读也不写公开集合模块。公开模块给应用代码用,私有加载器给打包器用。
-- 不会感知新增的集合。改完 `amamo.config.ts` 后请重启 dev server。
+export default withAmamoMdx(amamo)(async (_phase, { defaultConfig }) => ({
+  ...defaultConfig,
+  images: {
+    remotePatterns: [{ hostname: 'cdn.example.com', protocol: 'https' }],
+  },
+}))
+```
+
+包装器会 await 输入，保留其中的字段和已有 `webpack` callback，再加入自己的 Turbopack
+与 Webpack rule。
+
+## Phase 行为
+
+| Phase                      | 准备工作                                            |
+| -------------------------- | --------------------------------------------------- |
+| `PHASE_DEVELOPMENT_SERVER` | 构建一次，然后启动编译器的递归 watcher。            |
+| `PHASE_PRODUCTION_BUILD`   | 构建一次，不启动 watcher。                          |
+| 其它 phase                 | 跳过构建和 watcher，但仍返回带 loader rule 的配置。 |
+
+一次 wrapper 调用拥有一个延迟编译器和一个共享 build Promise。请在 Next config 中创建一次
+wrapper，而不是为单个请求重复创建。
+
+## Loader 流程
+
+同一个 loader 会注册到：
+
+- `turbopack.rules['*.mdx']`，并把输出声明为 JavaScript。
+- Webpack 中 `test: /\.mdx$/` 的 module rule。
+
+对于每个被 import 的源码路径，loader 会：
+
+1. 读取 `<generatedDirectory>/index.json`。
+2. 检查其中的配置指纹与 wrapper 当前的归一化配置一致。
+3. 找到源码缓存键，并校验它是否为十六进制。
+4. 读取对应 JSON 缓存记录。
+5. 校验记录键并返回编译后的 `module` 字符串。
+
+任何不一致都会以 `AMAMO_NEXT_CACHE_MISS` 拒绝，并要求执行协调构建。Loader 是只读的；解析、
+Shiki、manifest 写入和缓存清理都由 wrapper 拥有的编译器完成。
+
+## 导入 MDX
+
+```tsx
+import Post, { frontmatter } from '../content/posts/hello.mdx'
+
+export default function Page() {
+  return (
+    <main>
+      <h1>{frontmatter.title}</h1>
+      <Post />
+    </main>
+  )
+}
+```
+
+Turbopack 和 Webpack 读取相同的索引和记录格式。CI 会分别使用两个 bundler 构建仓库 fixture。
+
+## 开发期行为
+
+在开发模式中，编译器会递归监听 `config.root`。属于集合的新增或修改会执行 `transform`，删除
+已知记录会执行 `remove`。这会独立于 Next 的文件 watcher 刷新缓存和生成产物；两个 watcher
+之间没有时序协调机制。
+
+修改配置本身后请重启 `next dev`。调用 `withAmamoMdx(amamo)` 时，wrapper 的归一化配置、
+指纹和 loader 选项就已经固定。
+
+## 故障排查
+
+| 现象                    | 检查项                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------- |
+| `AMAMO_NEXT_CACHE_MISS` | 缓存已启用、启动构建已完成，并且 loader 使用同一个 `generatedDirectory`。     |
+| 配置指纹不一致          | 修改配置后重启 Next；必要时删除旧生成产物。                                   |
+| 自定义后缀没有被转换    | 改为 `.mdx` 或自行提供 Next loader；内置 rule 是固定的。                      |
+| 原生绑定不可用          | 在[受支持目标](/zh-CN/native-targets/)上重新安装，而不是复制 `node_modules`。 |

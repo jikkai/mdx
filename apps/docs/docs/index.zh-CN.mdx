@@ -1,58 +1,60 @@
 ---
-title: '@amamo/mdx'
-description: 以 Rust 为核心的原生 MDX 内容编译器,集成官方 Shiki 高亮、JSON Schema 校验、媒体导入、确定性 manifest 与内容寻址缓存。
-order: 1
+description: 通过一条原生编译流水线，将可信 MDX 编译成适配可配置 JSX runtime 的 JavaScript 模块、集合元数据和确定性的 JSON manifest。
 ---
 
-`@amamo/mdx` 是一个 MDX 内容编译器。Rust 核心负责解析 MDX、校验 frontmatter、编译 JSX、
-渲染代码块;同一份编译器状态同时驱动根 API、Vite 8 插件和 Next 16 包装器。相同的输入,
-在每一层都得到相同的输出。
+# 一个原生 MDX 内容编译器
+
+给 `@amamo/mdx` 一个 MDX 目录和一份 JSON Schema。一次构建会校验 frontmatter、按配置的 JSX
+runtime（默认 React）编译每篇文档、使用 Shiki 高亮围栏代码块，并写出集合注册表、配套声明和
+你配置的 manifest。
 
 ```sh
 pnpm add @amamo/mdx
 ```
 
-<CardGrid>
-  <Card title="快速开始" href="/zh-CN/getting-started/">
-    安装包、编写配置、编译第一篇文档。
-  </Card>
-  <Card title="配置" href="/zh-CN/configuration/">
-    集合、高亮、媒体策略、manifest 投影以及运行时缓存。
-  </Card>
-  <Card title="编译器 API" href="/zh-CN/compiler-api/">
-    build、transform、remove 与 dispose,两个适配器都依赖它们。
-  </Card>
-  <Card title="安全模型" href="/zh-CN/security/">
-    敏感字段、路径包含以及 manifest 投影的边界。
-  </Card>
-</CardGrid>
+## 选择入口
 
-## 它能做什么
+| 我想……                            | 从这里开始                         |
+| --------------------------------- | ---------------------------------- |
+| 在 Vite 应用中编译内容            | [Vite 8](/zh-CN/vite/)             |
+| 在 Next 应用中导入 MDX            | [Next 16](/zh-CN/next/)            |
+| 用自己的脚本驱动构建              | [编译器 API](/zh-CN/compiler-api/) |
+| 查看所有配置默认值                | [配置参考](/zh-CN/configuration/)  |
+| 处理私密 frontmatter 或不可信输入 | [安全模型](/zh-CN/security/)       |
 
-- **Rust 核心** 解析 MDX,用 JSON Schema 校验 frontmatter,并输出带源位置映射的 JavaScript
-  模块。
-- **官方 Shiki** 高亮代码块。默认使用 Oniguruma WASM 引擎;同时也支持 JavaScript 引擎。
-- **媒体导入** 将 Markdown 中的相对 URL 重写为静态导入,具体属性由 HTML 标签派生。
-- **确定性 manifest** 为每篇文档投影出公开 frontmatter、受保护状态与内容哈希。
-- **内容寻址缓存** 以源字节、配置指纹和 Shiki 版本的哈希作为键,源不变就绝不重写。
+## 一篇文档如何通过流水线
 
-## 它不做什么
+```text
+MDX 源码 + 可序列化配置
+  -> TypeScript：发现文件并串行化操作
+  -> Rust：YAML、JSON Schema、MDX 树、媒体、派生字段
+  -> JavaScript：Shiki 官方主题、语法和引擎
+  -> Rust：高亮模块、安全元数据、manifest 投影、缓存记录
+  -> TypeScript：collections.mjs、collections.d.ts、index.json、manifest
+```
 
-- 它不是运行时。编译器只把 JavaScript 模块写到磁盘并返回;渲染由宿主负责。
-- 它不是沙箱。MDX 中可以包含可执行 JavaScript,只能编译你信任的作者写的内容。
-- 它不是内容管理系统。manifest 用来投影字段,不能用来生成字段。
+Rust 负责解析、校验、MDX 编译、manifest 投影和持久化记录。Shiki 留在 JavaScript 侧；它生成
+的 HAST 经校验并注入后，Rust 才输出最终模块。直接 API、Vite 插件和 Next 包装器共用这套实现，
+但每个编译器或适配器实例都有自己的状态。
 
-## 三种表面,一个编译器
+## 一次构建会得到什么
 
-| 表面    | 引入路径          | 适用场景                            |
-| ------- | ----------------- | ----------------------------------- |
-| 根 API  | `@amamo/mdx`      | 想用脚本直接驱动编译器。            |
-| Vite 8  | `@amamo/mdx/vite` | 用 Vite 构建并自管内容。            |
-| Next 16 | `@amamo/mdx/next` | 用 Next 构建,并复用同一份内容集合。 |
+- 每个被导入的 MDX 文档都有一个 JavaScript 模块，并导出 `frontmatter` 和已启用的派生字段。
+- `collections.mjs`：包含文档元数据和延迟源码 import 的确定性注册表。
+- `collections.d.ts`：集合注册表的配套声明产物。
+- 可选 JSON manifest：支持显式字段投影、排序，以及数组或以键组织的对象输出。
+- BLAKE3 寻址的缓存记录：未变化的文档可以跳过原生编译和 Shiki。
 
-Vite 和 Next 适配器运行的是同一份 `IAdapterCompiler`;区别只是谁拥有文件监听器和生成模块。
+Markdown 写出的相对媒体 URL 会在全新编译通过 root 检查后变成静态 import。手写的 MDX JSX
+仍会作为 MDX 的一部分编译，但其中的媒体属性不会被重写。
 
-## 下一步
+## 有意保留的边界
 
-如果想做端到端的第一次编译,从[快速开始](/zh-CN/getting-started/)读起;如果已经知道需要
-哪些集合,可以直接跳到[配置](/zh-CN/configuration/)。
+- **只接受可信内容。** MDX 编译模块在被 import 或渲染时可以执行 JavaScript。Schema 校验
+  不是沙箱。
+- **这是构建期编译器，不是运行时。** 宿主使用配置的 JSX runtime import 或渲染输出模块。
+- **配置只能是纯数据。** 配置值加载后，函数、类实例、symbol、访问器、循环引用和非有限数字
+  都会被拒绝。
+- **只支持原生目标。** 不提供 JavaScript 或 WASI 回退，详见[原生目标](/zh-CN/native-targets/)。
+
+继续阅读[快速开始](/zh-CN/getting-started/)，完成第一篇文档的编译。

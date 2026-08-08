@@ -1,58 +1,85 @@
 ---
-title: Native targets
-description: The list of prebuilt native binaries and what happens on an unsupported target.
-order: 8
+description: Supported platform packages, native loading errors, Node.js policy, local builds, and release verification.
 ---
 
-`@amamo/mdx` ships a prebuilt native binding for every platform it supports. The binding is
-installed through `optionalDependencies`; an unsupported platform skips the install and the
-package refuses to load when `createCompiler` is called.
+# Native targets
+
+The published package loads one napi-rs binary selected from the current operating system,
+architecture, and Linux libc. No JavaScript or WASI implementation is bundled.
 
 ## Supported targets
 
-| Target triple                | OS      | Architecture  |
-| ---------------------------- | ------- | ------------- |
-| `aarch64-apple-darwin`       | macOS   | arm64         |
-| `x86_64-apple-darwin`        | macOS   | x64           |
-| `aarch64-unknown-linux-gnu`  | Linux   | arm64 (glibc) |
-| `x86_64-unknown-linux-gnu`   | Linux   | x64 (glibc)   |
-| `aarch64-unknown-linux-musl` | Linux   | arm64 (musl)  |
-| `x86_64-unknown-linux-musl`  | Linux   | x64 (musl)    |
-| `x86_64-pc-windows-msvc`     | Windows | x64           |
+| Rust target                  | Platform package              | Runtime           |
+| ---------------------------- | ----------------------------- | ----------------- |
+| `aarch64-apple-darwin`       | `@amamo/mdx-darwin-arm64`     | macOS arm64       |
+| `x86_64-apple-darwin`        | `@amamo/mdx-darwin-x64`       | macOS x64         |
+| `aarch64-unknown-linux-gnu`  | `@amamo/mdx-linux-arm64-gnu`  | Linux arm64 glibc |
+| `x86_64-unknown-linux-gnu`   | `@amamo/mdx-linux-x64-gnu`    | Linux x64 glibc   |
+| `aarch64-unknown-linux-musl` | `@amamo/mdx-linux-arm64-musl` | Linux arm64 musl  |
+| `x86_64-unknown-linux-musl`  | `@amamo/mdx-linux-x64-musl`   | Linux x64 musl    |
+| `x86_64-pc-windows-msvc`     | `@amamo/mdx-win32-x64-msvc`   | Windows x64       |
 
-The CI matrix builds every target on its native runner. The macOS x64 build uses an Intel
-runner; the Linux musl builds cross-compile through `cargo-zigbuild` and a pinned Zig
-toolchain.
+## When the binding loads
 
-## What happens on an unsupported target
+`createCompiler()` normalizes the config and may initialize Shiki without loading Rust. The first
+`build()` or `transform()` enters `prepareNativeBatch`, which then requires `native.cjs` and the
+matching binary.
 
-`createCompiler` calls into the native binding at construction time. If the binding is missing
-or fails to load, the call rejects. There is no JavaScript or WASI fallback, and there is no
-flag to opt into one — adding a fallback would change the perf and language-coverage story,
-and that is a decision we do not want to make by default.
+The loader tries a local `index.<platform>.node` first, then the corresponding platform package. A
+platform package must have the exact same version as the root package.
 
-When you ship a native package, pick a supported target triple in the `napi.targets` array and
-let the napi CLI build the right binding for the host.
+| Top-level error            | Meaning                                                             |
+| -------------------------- | ------------------------------------------------------------------- |
+| `AMAMO_NATIVE_UNSUPPORTED` | The OS or CPU has no known target mapping.                          |
+| `AMAMO_NATIVE_UNAVAILABLE` | The target is known, but neither local nor packaged binding loaded. |
 
-## Required Node.js
+A package version mismatch appears as `AMAMO_NATIVE_VERSION_MISMATCH` inside the
+`AMAMO_NATIVE_UNAVAILABLE` aggregate cause, not as the top-level loader error.
 
-The package is tested on Node.js 20.19 and newer. Older Node.js releases miss the async
-hooks and the `node:fs/promises` semantics the compiler relies on.
+If installation succeeded on another machine, reinstall dependencies on the current target. Package
+manager caches are safe; a copied `node_modules` directory is not.
 
-## Picking a highlighter engine
+## Node.js policy
 
-The native binding is the same on every target. The highlighter engine is a separate choice:
+The root and platform packages declare Node.js `>=20.19`. Repository CI currently runs the complete
+quality gate on Node.js 24, then builds the Next fixture with Turbopack and Webpack. Treat 20.19 as
+the supported engine floor, not a claim that every intervening release is exercised in CI.
 
-- `oniguruma` — the default. The Shiki WASM engine, full grammar fidelity, slightly larger
-  startup cost.
-- `javascript` — the Shiki JavaScript engine. Lighter startup, smaller language set.
+The native crate enables N-API 8.
 
-Set the engine in the `highlight` block of the config. Both engines produce the same output for
-every language they share; the difference is grammar coverage, not correctness.
+## Shiki engines are separate
 
-## Building a custom target
+The native target does not select the highlighter engine. Configure Shiki independently:
 
-The native binding is a regular napi-rs project. To build a target that is not in the table
-above, run the napi build with a custom `--target` flag. The CI matrix is the source of truth
-for what works in practice; ports to new targets should be validated by running `cargo test`
-on the target machine before publishing.
+```ts
+highlight: {
+  provider: 'shiki',
+  engine: 'oniguruma', // or 'javascript'
+  themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+}
+```
+
+Both values use Shiki's official engine implementations. Test your actual language and theme set
+before switching; this package does not promise byte-identical output between engines.
+
+## Build locally
+
+The repository pins Rust in `rust-toolchain.toml`. On a supported development machine:
+
+```sh
+pnpm install
+pnpm run build:native
+node scripts/check-artifacts.mjs --local native.cjs
+```
+
+`build:native` builds the current platform binding and generates `native.d.ts`. `pnpm test` rebuilds
+both native and TypeScript output before running the integration suite.
+
+Adding a target requires more than passing `--target`: update the napi target list, native loader,
+platform package, artifact validator, release matrix, and target-native load verification.
+
+## Release verification
+
+The release workflow builds and load-tests each native artifact on its matrix runner (or Alpine for
+musl). The publish job then runs the full quality gate, validates all downloaded package artifacts,
+dry-runs every npm package, and publishes platform packages before the root package.

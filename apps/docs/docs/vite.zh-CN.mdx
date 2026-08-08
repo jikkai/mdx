@@ -1,66 +1,92 @@
 ---
-title: Vite 8
-description: 把 @amamo/mdx/vite 加进 Vite 配置,让插件驱动编译器。
-order: 5
+description: 执行完整启动构建，直接转换被 import 的 MDX，并在开发时保持生成元数据最新。
 ---
 
-Vite 插件是把 `@amamo/mdx` 接进 Vite 8 应用的最直接方式。插件把所有 Vite 环境合并到同一次
-启动构建上,运行根 API 暴露的同一份 `ICompiler`,并复用 Vite 自己的 watcher 处理 add、
-change 和 delete 事件。
+# Vite 8
 
-## 安装与配置
+`amamoMdx` 会为一个 Vite 插件实例延迟创建一个编译器。Vite 管理模块 transform 和文件系统
+事件；编译器管理已校验记录、manifest 和生成的集合文件。
 
-```sh
-pnpm add @amamo/mdx
-```
+## 配置插件
 
 ```ts
 // vite.config.ts
-import { defineConfig } from 'vite'
 import { amamoMdx } from '@amamo/mdx/vite'
-import amamo from './amamo.config.js'
+import { defineConfig } from 'vite'
 
-export default defineConfig({ plugins: [amamoMdx(amamo)] })
+import amamo from './amamo.config.mjs'
+
+export default defineConfig({
+  plugins: [amamoMdx(amamo)],
+})
 ```
 
-`amamoMdx` 返回一个普通 Vite 插件。它声明 `enforce: 'pre'`,保证先于其它 transform 跑;
-`sharedDuringBuild: true` 让所有环境共享同一份编译记录。
+插件声明了 `enforce: 'pre'` 和 `sharedDuringBuild: true`。当 Vite 多环境构建启用共享插件时，
+client 和 SSR 环境会使用同一个插件编译器，而不是分别编译整套内容。
 
-## 多环境构建如何接入
+## 导入文档
 
-Vite 8 常把项目拆成 client、ssr 等多个环境。插件不关心是哪个环境触发的编译 —— 第一次使用
-时跑一次编译,后续任何环境再要同一篇文档就直接拿缓存结果。连续调两次 `build()` 也会在编译
-器内部合并。
+```tsx
+import Post, { frontmatter } from './content/posts/hello.mdx'
 
-## 文件监听
+export function Page() {
+  return (
+    <article>
+      <h1>{frontmatter.title}</h1>
+      <Post />
+    </article>
+  )
+}
+```
 
-插件通过 Vite 的 `configureServer` 钩子接入。它给 `server.watcher` 挂上 `add`、`change`、
-`unlink`:
+对于属于集合的文件，`transform` hook 会忽略传入的源码字符串，向编译器请求当前 JavaScript
+模块。Vite 收到代码前，敏感 frontmatter 已被移除，Markdown 媒体已被重写，启用的 Shiki
+结果也已注入。
 
-- `add` 与 `change` 会调 `compiler.transform(file)`,只要有产物字节变化就让生成集合模块
-  失效。
-- `unlink` 调 `compiler.remove(file)`,并以同样方式让模块失效。
+## 生命周期
 
-失效会触发一次 full-reload 热更新。目前插件没有更细粒度的 HMR 边界 —— 刷新的单位是
-"集合模块变了,所以应用整体重跑"。
+| Vite hook 或事件            | 编译器操作                             |
+| --------------------------- | -------------------------------------- |
+| `buildStart`                | 执行一次完整 `build()`。               |
+| `transform`                 | 对属于集合的文件执行 `transform(id)`。 |
+| 开发服务器 `add` / `change` | 转换路径并刷新生成产物。               |
+| 开发服务器 `unlink`         | 删除已知记录并刷新生成产物。           |
+| 开发 HTTP server `close`    | 移除 watcher handler 并释放编译器。    |
 
-## 处理 import
+第一次启动调用会被共享，因此重复的 build hook 不会启动多次完整构建。之后的编译器操作仍会
+串行执行。
 
-当宿主应用 import 一个 MDX 文件,插件走编译器把文件 transform 成编译后的 JavaScript,作为
-模块体返回给 Vite。JavaScript 交回 Vite 之前,编译器已经剥掉敏感字段、解析了媒体 URL 并渲染
-了代码块。
+## 开发期更新
 
-## 释放
+当新增、修改或删除导致至少一个生成产物变化时，插件会在 Vite module graph 中找到并失效
+`collections.mjs`，然后发送 full reload。目前还没有单文档级的 HMR 边界。
 
-当 dev server 的 HTTP server 发出 `close` 事件时,插件会 dispose 它持有的编译器。`dispose`
-是幂等的;对于从未构造过编译器的插件实例,dispose 直接短路。
+Watcher 编译失败会发送到 Vite logger 和错误 overlay。`AMAMO_MEDIA_MISSING` 这样的成功记录
+warning 只保存在 `record.diagnostics` 中，插件不会打印它们。
+
+## 生成的集合
+
+应用代码可以导入生成注册表：
+
+```ts
+import { collections } from './.amamo-mdx/collections.mjs'
+
+const published = collections.posts.filter((document) => !document.frontmatter.draft)
+```
+
+每个注册项都包含元数据和 `load: () => import(originalMdxPath)`。Vite 会让这个延迟 import
+继续通过同一个插件。插件不读取 `index.json`；这个私有索引只供 Next loader 使用。
 
 ## 生产构建
 
-`vite build` 时插件跑的是同一次启动编译。编译好的记录被写到 `generatedDirectory`,
-宿主应用自己的打包器通过 import 从 `<generatedDirectory>/collections.mjs` 拿到生成模块。
+`vite build` 执行同样的完整启动构建和逐 import transform。字节未变化的产物会保留修改时间，
+让下游工具避免无效工作。
 
-## 检视构建结果
+只有在可以接受重复原生/Shiki 工作时才设置 `cache: false`。与 Next 适配器不同，Vite 没有
+持久化记录也能完成 transform。
 
-Vite 插件本身不打印构建产物。想看 `discovered`、`compiled`、`cached`、`outputsWritten`,
-可以从脚本里调 `build()` 然后打印结果,或者在 `vite.config.ts` 里挂自己的 reporter。
+## 当前限制
+
+- 生成产物变化会触发 full reload。
+- 插件不会打印 `IBuildResult`；需要报告时请使用直接[编译器 API](/zh-CN/compiler-api/)。
+- 每次调用插件都会拥有独立编译器状态；同一份内容配置只注册一次插件。

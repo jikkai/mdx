@@ -1,79 +1,112 @@
 ---
-title: 安全模型
-description: 敏感字段覆盖什么、路径包含如何被强制,以及 manifest 投影能读什么、不能读什么。
-order: 7
+description: 可执行 MDX、敏感 frontmatter、诊断、媒体路径、manifest 和缓存产物的真实信任边界。
 ---
 
-MDX 中可以包含可执行 JavaScript。`@amamo/mdx` 会编译它,但不沙箱化它。Schema 校验不是
-沙箱。本包按构造给出一小撮保证,这一页把它们列出来。
+# 安全模型
 
-## 可信作者
+`@amamo/mdx` 只保护特定构建产物，不会把不可信 MDX 变安全。请把作者、配置模块、生成文件和
+部署目标当作彼此独立的信任边界。
 
-只编译你信任的作者写的内容。编译器会乐呵呵地跑包含
-`import { exec } from 'node:child_process'` 的 MDX、调 `fetch` 访问内网,或者在 `{...}`
-里求值任意表达式。这里没有"安全 MDX"白名单,也没有运行时的污点追踪。
+## MDX 可以执行代码
 
-## 敏感字段
+MDX 可以包含 ESM import 和 JavaScript 表达式。编译器会把它们输出到 JavaScript 模块中，
+宿主可能在打包、import、服务端渲染或客户端渲染时执行这些代码。
 
-把任何不应进入打包产物的字段在所属集合里标为 `sensitive`:
+只编译你信任、并允许其以宿主应用权限运行代码的作者内容。JSON Schema 只校验 frontmatter
+数据，不会检查或沙箱化 MDX 程序。
+
+## 敏感 frontmatter
+
+声明不得进入成功编译产物的顶层字段：
 
 ```ts
 collections: {
   posts: {
     directory: 'content/posts',
     schema: { /* ... */ },
-    sensitive: ['password', 'internalNotes'],
+    sensitive: ['accessToken', 'internalNotes'],
   },
 }
 ```
 
-敏感字段在编译器写盘之前就被移除。缓存记录、生成模块、私有加载器索引,以及所有公开 manifest
-从一开始就没见过这个字段。没有任何开关能让明文再次出现。
+成功编译的顺序是：
 
-## manifest 投影
+1. 解析全部 YAML frontmatter。
+2. 对完整对象应用 schema 默认值并校验。
+3. 把每个顶层敏感字段移出公开 frontmatter。
+4. 只计算配置明确允许的 manifest 投影。
+5. 输出不含敏感字段明文的模块、记录和 manifest。
 
-manifest 字段投影读敏感源只能是 `'exists'` 或 `'sha256'`:
+`sensitive` 只匹配顶层名称。声明 `credentials` 会移除整个顶层 `credentials` 值，而不是单独
+分类其中的 `credentials.password`。
+
+## 诊断可能包含提交值
+
+Schema 校验发生在敏感字段移除之前，validator 消息可能引用非法值。即使字段列在
+`sensitive` 中，也不要把原始编译错误或构建日志返回给不可信作者。
+
+成功结果的 warning 诊断保存在文档记录中。编译器和 Vite 插件不会自动打印它们，因此由调用方
+控制暴露位置。
+
+## Manifest 投影
+
+敏感源只能使用以下 transform：
 
 ```ts
-manifests: {
-  server: {
-    output: '.amamo-mdx/server.json',
-    fields: {
-      key: 'key',
-      protected: { from: 'password', transform: 'exists' },
-      passwordHash: { from: 'password', transform: 'sha256' },
-    },
-  },
+fields: {
+  tokenPresent: { from: 'accessToken', transform: 'exists' },
+  tokenFingerprint: { from: 'accessToken', transform: 'sha256' },
 }
 ```
 
-`'exists'` 根据源字段是否存在输出 `true` 或 `false`。`'sha256'` 输出源字段的十六进制
-SHA-256。除此之外的形式 —— 包括直接复制字符串 —— 会被拒绝。编译器是唯一见过明文的部分,
-它在校验完成后就把字段丢弃。
+- `exists` 只暴露值是否存在且非 null。
+- `sha256` 输出确定性的无盐 digest。
 
-服务端密码校验就是按这个套路工作:宿主应用拿到哈希,对自己拿到的用户输入做一次哈希,比较
-两者的结果。明文从未离开编译器。
+原始 SHA-256 不是密码哈希函数。不要用这个投影存储或校验人类密码；请在宿主中使用专门的
+密码 KDF 和身份验证系统。只有在值本身有足够高熵，并且可以接受泄露相等关系时，确定性摘要
+才可能适用。
 
-## 路径包含
+`public`、`server` 之类的 manifest 名称没有访问控制语义。编译器只负责写配置路径；该路径
+是否公开由部署系统决定。
 
-相对媒体 URL 相对于所在的 MDX 文件解析,然后与配置的 `root` 校验。解析后落到 root 之外的
-URL —— 即使是经过符号链接 —— 会被拒绝。编译器既不允许相对路径穿过 root,也不允许以 `/`
-或 `..` 起头逃出包含。
+## Markdown 媒体路径包含
 
-## 缓存写入
+全新编译时，由 Markdown 产生的相对媒体会先从源文件归一化、检查是否位于 `root` 内；文件
+存在时还会 canonicalize，并拒绝解析到 canonical root 之外的 symlink。外部 URL、绝对 URL、
+fragment、协议相对 URL 和 data URL 不会经过本地文件检查。手写 MDX JSX 不会被重写。
 
-编译记录与高亮器缓存都按"同目录临时文件 + 原子 rename"的模式写入。读端在写期间打开
-缓存,要么看到旧文件,要么看到新文件,绝不会看到半成品。缓存目录本身位于
-`generatedDirectory` 下,宿主应用可以把 `generatedDirectory` 放在 tmpfs 或排除出备份,其它
-什么都不用动。
+Warm cache 命中只检查早先记录的依赖路径是否仍存在。如果 MDX 源码和配置未变化，但媒体
+symlink 更换了目标，它不会再次 canonicalize。修改目标后，请删除受影响缓存，或在目标可能
+变化期间保持缓存关闭。单次关闭缓存会重新检查路径，但不会替换旧缓存记录。
 
-## 纯数据配置
+Manifest 的 `mediaUrl` transform 不同：它只按词法把相对值映射为 root-relative URL，既不
+检查文件存在，也不创建 import。
 
-配置被限制为纯可序列化数据。函数、类实例、symbol 键、循环引用都会在构造时被拒绝。指纹是
-在归一化后的纯数据形态上算的,因此两份产出同样归一化形式的配置会产生同样的缓存记录 ——
-即使其中一份重新排了对象的键。
+## 配置只在 import 后被限制为数据
 
-## 诊断
+归一化会拒绝函数、访问器、symbol、类实例、循环引用、非有限数字和其它非 JSON-like 值。这
+让归一化值足以参与指纹计算，但不会沙箱化创建该值的 JavaScript 或 TypeScript 配置模块。
 
-当构建因安全相关原因失败时,诊断信息会具体指向问题:它会标明字段、集合和路径。诊断永远
-不会包含敏感字段的值。
+指纹使用归一化数据的序列化结果，因此对象键顺序会影响指纹；即使两个对象语义相同，也可能
+产生 cache miss。
+
+## 缓存与产物写入
+
+缓存记录包含公开 frontmatter、派生数据、安全投影、依赖、诊断和编译模块，不包含敏感字段
+明文。高亮结果属于同一记录，不存在单独的磁盘高亮缓存。
+
+缓存、manifest 和三个共享生成文件可以位于不同的配置目录。应根据各自内容保护这些路径，
+不要假设它们全部位于 `generatedDirectory` 下。
+
+共享生成文件和 manifest 会在写入前比较现有字节。它们与缓存记录都会通过同目录临时文件和
+rename 完成整文件替换；缓存记录不会执行 TypeScript 侧的字节比较。读取方应当只会看到完整
+旧文件或完整新文件，而不是写到一半的记录。
+
+## 部署检查清单
+
+- 只有可信作者能修改 MDX 及其 import。
+- 顶层敏感字段已列出，并有回归测试覆盖。
+- 不向不可信用户暴露原始校验错误。
+- 含私密元数据的 manifest 没有部署到公开路径。
+- symlink 目标变化会强制执行全新媒体编译。
+- 身份认证和密码存储不依赖 manifest 的 SHA-256 投影。

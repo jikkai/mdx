@@ -1,18 +1,45 @@
 ---
-title: 配置
-description: 集合、高亮、媒体、manifest、运行时缓存,以及所有键。
-order: 3
+description: 集合、MDX、高亮、媒体、派生字段、manifest、缓存和生成产物的准确默认值与行为。
 ---
 
-`defineConfig` 只做类型标注;真正的工作发生在编译器构造时。编译器把你的配置归一化成
-`INormalizedConfig`,这个形状同时进入缓存指纹、manifest 渲染器,以及 Vite/Next 适配器。
+# 配置
 
-本页按顶层键组织。
+`defineConfig` 会原样返回参数。`normalizeConfig` 才是运行时边界：它拒绝非纯数据、应用默认值、
+解析路径，并返回所有编译器和适配器共用的 `INormalizedConfig`。
 
-## collections
+```ts
+import { defineConfig } from '@amamo/mdx'
 
-一个集合就是一个共享 frontmatter schema 的 MDX 目录。编译器遍历每个集合,用 schema 校验
-每条记录,然后在记录进入缓存、生成模块或公开 manifest 之前,移除 `sensitive` 中列出的字段。
+export default defineConfig({
+  collections: {
+    posts: {
+      directory: 'content/posts',
+      schema: { type: 'object' },
+    },
+  },
+})
+```
+
+至少需要一个集合。
+
+## 顶层配置
+
+| 键                   | 默认值          | 作用                                             |
+| -------------------- | --------------- | ------------------------------------------------ |
+| `root`               | `process.cwd()` | 相对配置路径的基准目录。                         |
+| `collections`        | 必填            | 内容目录、schema、locale 和 slug。               |
+| `mdx`                | 见下文          | MDX 解析和 JSX runtime 选项。                    |
+| `highlight`          | 启用 Shiki      | 语法高亮策略；设为 `false` 可禁用。              |
+| `media`              | 启用重写        | Markdown 媒体 import 策略；设为 `false` 可禁用。 |
+| `derived`            | 全部关闭        | 阅读时间和最后修改时间。                         |
+| `manifests`          | `{}`            | 命名 JSON 投影。                                 |
+| `cache`              | 启用            | 持久化编译记录；设为 `false` 可禁用。            |
+| `generatedDirectory` | `.amamo-mdx`    | 注册表、声明文件和 Next 私有索引目录。           |
+
+函数、symbol、访问器、类实例、循环引用、`undefined`、`bigint` 和非有限数字都会被拒绝。检查
+发生在配置模块本身已经 import 之后，因此不会沙箱化那个模块。
+
+## 集合
 
 ```ts
 collections: {
@@ -25,29 +52,43 @@ collections: {
       type: 'object',
       properties: {
         title: { type: 'string' },
-        draft: { type: 'boolean' },
+        draft: { type: 'boolean', default: false },
       },
       required: ['title'],
     },
-    sensitive: ['draft'],
+    sensitive: ['accessToken'],
     slug: { indexNames: ['index', 'page'] },
   },
 }
 ```
 
-| 键           | 默认值        | 作用                                                   |
-| ------------ | ------------- | ------------------------------------------------------ |
-| `directory`  | 必填          | 基于 `root` 解析。编译时该目录必须存在(或被创建)。     |
-| `extensions` | `['.mdx']`    | 纳入的文件扩展名。每项必须以 `.` 开头。                |
-| `locales`    | 无            | 该集合的 locale 变体。详见下文。                       |
-| `schema`     | 必填          | 用于校验 frontmatter 的 JSON Schema。                  |
-| `sensitive`  | `[]`          | 序列化前移除的字段。详见[安全模型](/zh-CN/security/)。 |
-| `slug`       | `index, page` | 折叠到集合根 slug 的文件名。                           |
+| 键                | 默认值              | 行为                                                 |
+| ----------------- | ------------------- | ---------------------------------------------------- |
+| `directory`       | 必填                | 从 `root` 解析；调用 `build()` 前目录必须存在。      |
+| `extensions`      | `['.mdx']`          | 纳入集合的后缀；每项必须以 `.` 开头。                |
+| `locales`         | 无                  | 可选的基于文件名的 locale 映射。                     |
+| `schema`          | 必填                | 校验 YAML frontmatter 的 JSON Schema Draft 2020-12。 |
+| `sensitive`       | `[]`                | 校验后从公开记录中移除的顶层 frontmatter 名称。      |
+| `slug.indexNames` | `['index', 'page']` | 推导 slug 时省略的 basename。                        |
 
-如果设置了 `locales`,`default` 必须出现在 `names` 中,文件名遵循 `name.<locale>.mdx`
-(例如 `getting-started.zh-CN.mdx`)。缺失默认 locale 的记录会被解析成非本地化的 slug。
+校验前会应用 `properties`、`items` 和 `allOf` 中声明的 schema 默认值，但绝不做类型转换。
+由于校验先于敏感字段移除，诊断可能包含用户提交的敏感值；不要把原始构建错误暴露给不可信用户。
 
-## mdx
+配置 locale 后，无后缀文件使用默认 locale；`page.zh-CN.mdx` 这样的已知后缀会选择对应 locale。
+默认 locale 必须出现在 `names` 中。文档身份推导如下：
+
+```text
+posts/guide.mdx          -> slug "guide", key "en:guide", locale "en"
+posts/guide.zh-CN.mdx    -> slug "guide", key "zh-CN:guide", locale "zh-CN"
+posts/index.mdx          -> slug "/",     key "en:/",     locale "en"
+```
+
+没有 locale 配置时，key 就是 slug。完整构建会拒绝同一集合内的重复 key。
+
+> Next 适配器目前只注册 `*.mdx`。直接编译器和 Vite 插件可以处理自定义集合后缀，但内置
+> Next loader 不可以。
+
+## MDX
 
 ```ts
 mdx: {
@@ -58,16 +99,17 @@ mdx: {
 }
 ```
 
-| 键                     | 默认值    | 作用                                                                          |
-| ---------------------- | --------- | ----------------------------------------------------------------------------- |
-| `gfm`                  | `true`    | 启用 GitHub 风格 Markdown(表格、任务列表、自动链接)。                         |
-| `hardBreaks`           | `false`   | 把单个换行渲染为 `<br>`。CommonMark 默认把它当作空格。                        |
-| `jsxImportSource`      | `'react'` | 传给 JSX 运行时的 `importSource`。                                            |
-| `providerImportSource` | `''`      | 传给 JSX 运行时的 `providerImportSource`。设为 `''` 可保留 MDX JSX 字面写法。 |
+| 键                     | 默认值    | 行为                                                  |
+| ---------------------- | --------- | ----------------------------------------------------- |
+| `gfm`                  | `true`    | 启用 GFM 表格、任务列表、自动链接等语法。             |
+| `hardBreaks`           | `false`   | 把文本节点内的换行转换成 `<br>`。                     |
+| `jsxImportSource`      | `'react'` | 编译模块使用的 JSX runtime 包。                       |
+| `providerImportSource` | `''`      | 可选的 MDX 组件 provider import；空字符串表示不导入。 |
 
-`providerImportSource: ''` 是在不引入 JSX provider 的前提下保留作者写的 JSX 的最直接方式。
+手写的 ESM 和 MDX JSX 仍会进入编译模块。`providerImportSource` 控制 MDX 组件 provider 的
+接线，不是保留或删除 JSX 的开关。
 
-## highlight
+## 语法高亮
 
 ```ts
 highlight: {
@@ -80,19 +122,21 @@ highlight: {
 }
 ```
 
-| 键                  | 默认值                                             | 作用                                                           |
-| ------------------- | -------------------------------------------------- | -------------------------------------------------------------- |
-| `provider`          | `'shiki'`                                          | 高亮器。目前只发布 Shiki。                                     |
-| `engine`            | `'oniguruma'`                                      | `oniguruma` 拥有完整语法保真度,`javascript` 可避开 WASM 依赖。 |
-| `languages`         | `'auto'`                                           | `auto` 按需加载语法,或者用一个明确列表锁定语法集。             |
-| `themes`            | `{ light: 'vitesse-light', dark: 'vitesse-dark' }` | 亮色与暗色 Shiki 主题。                                        |
-| `unknownLanguage`   | `'error'`                                          | `'error'` 拒绝未知语言,`'plain'` 当作纯文本渲染。              |
-| `colorReplacements` | `{}`                                               | 高亮之后做的 `color` → `color` 替换映射。                      |
+| 键                  | 默认值           | 行为                                        |
+| ------------------- | ---------------- | ------------------------------------------- |
+| `provider`          | `'shiki'`        | 固定字面量；目前不提供其它 provider。       |
+| `engine`            | `'oniguruma'`    | Shiki 的 `oniguruma` 或 `javascript` 引擎。 |
+| `languages`         | `'auto'`         | 按需加载，或预加载列出的内置语言。          |
+| `themes`            | Vitesse 明暗主题 | Shiki 内置主题名。                          |
+| `unknownLanguage`   | `'error'`        | 拒绝未知语言，或按 `'plain'` 渲染。         |
+| `colorReplacements` | `{}`             | Shiki 的颜色替换映射。                      |
 
-设置 `highlight: false` 可以完全关闭代码高亮。缓存记录和生成模块仍然会跑,只是跳过高亮
-这一遍。
+显式语言数组只是预加载这些语法，不会阻止之后按需加载其它语言。Shiki 在内存中复用语言加载；
+高亮结果保存在文档缓存记录内，不存在单独的磁盘高亮缓存。
 
-## media
+设置 `highlight: false` 可跳过代码块高亮。
+
+## 媒体
 
 ```ts
 media: {
@@ -109,17 +153,20 @@ media: {
 }
 ```
 
-| 键           | 默认值    | 作用                                                    |
-| ------------ | --------- | ------------------------------------------------------- |
-| `attributes` | 上表      | 每个标签下保存媒体 URL 的属性名。编译器会重写这些属性。 |
-| `missing`    | `'error'` | `'error'` 让构建失败,`'warn'` 记日志后按字面 URL 继续。 |
+上表是默认属性映射。只要提供 `attributes`，就会替换整张默认表；请把仍需重写的标签全部列出。
 
-相对 URL 会相对于所在文件解析,被限制在 `root` 之内(包括符号链接解析),并被重写为静态
-导入。宿主应用负责在构建时处理这个资源。
+由 Markdown 元素产生的相对 URL 会从源文件解析并变成静态 import。绝对路径、fragment、
+协议相对 URL、data URL 和带 scheme 的 URL 会原样通过。手写的 MDX JSX（例如
+`<img src="./manual.png" />`）不会被重写。
 
-设置 `media: false` 可以完全关闭媒体重写。
+| `missing` | 结果                                                                 |
+| --------- | -------------------------------------------------------------------- |
+| `'error'` | 拒绝这次全新编译。                                                   |
+| `'warn'`  | 保留原始 URL，并向 `record.diagnostics` 添加 `AMAMO_MEDIA_MISSING`。 |
 
-## derived
+直接编译器和 Vite 适配器不会自动打印 warning。设置 `media: false` 可禁用重写。
+
+## 派生字段
 
 ```ts
 derived: {
@@ -128,54 +175,69 @@ derived: {
 }
 ```
 
-两个键默认都关闭。`lastModified` 把文件的最后修改时间记到记录上,`readingTime` 根据正文
-估算阅读时长。需要哪个就开哪个,两者都会给每次 transform 增加工作量。
+`readingTime` 排除代码，把每个连续 ASCII 单词或每个中日韩字符计为一个单位。分钟数为
+`ceil(units / 300)`，并且最少一分钟。
 
-## manifests
+`lastModified` 优先使用文件最近一次 Git commit 的时间，取不到时回退到文件系统修改时间。启用
+的值会出现在 `record.derived` 中，也会成为编译模块的具名导出。
+
+## Manifest
 
 ```ts
 manifests: {
   public: {
     output: '.amamo-mdx/public.json',
     collections: ['posts'],
-    key: 'key',
-    sort: [{ field: 'key', direction: 'asc' }],
+    sort: [{ field: 'publishedAt', direction: 'desc' }],
     fields: {
       key: 'key',
       title: 'title',
+      publishedAt: { from: 'publishedAt', default: null },
     },
   },
   server: {
     output: '.amamo-mdx/server.json',
+    key: 'key',
     fields: {
       key: 'key',
-      protected: { from: 'password', transform: 'exists' },
-      passwordHash: { from: 'password', transform: 'sha256' },
+      tokenPresent: { from: 'accessToken', transform: 'exists' },
+      tokenFingerprint: { from: 'accessToken', transform: 'sha256' },
     },
   },
 }
 ```
 
-| 键            | 默认值  | 作用                                       |
-| ------------- | ------- | ------------------------------------------ |
-| `output`      | 必填    | 基于 `root` 解析。manifest 文件的路径。    |
-| `collections` | 全部    | 该 manifest 包含的集合。                   |
-| `key`         | 集合 id | 每条记录的标识字段。默认使用文档的 `key`。 |
-| `sort`        | 无      | 有序的 `{ field, direction }` 排序键列表。 |
-| `fields`      | 必填    | `输出键` → 投影 的映射。详见下文。         |
+| 键            | 默认值   | 行为                                                       |
+| ------------- | -------- | ---------------------------------------------------------- |
+| `output`      | 必填     | 从 `root` 解析的 JSON 路径，与 `generatedDirectory` 无关。 |
+| `collections` | 全部集合 | 纳入这个 manifest 的集合名。                               |
+| `fields`      | 必填     | 输出字段到源投影的映射。                                   |
+| `sort`        | `[]`     | 有序的投影字段排序键；direction 默认 `asc`。               |
+| `key`         | 无       | 不设置时输出数组；设置后输出以这个投影字段为键的对象。     |
 
-一个字段要么是字符串(直接复制指定 frontmatter 字段),要么是带 `from` 源与可选 `transform`
-的对象。允许的 transform 有:
+配置 `key` 后，对应名称必须存在于投影记录中，并解析成唯一的 string、number 或 boolean。
+缺失、null、object、array 和重复值都会让构建失败。缺失或 null 的排序值在升降序中都保持最后，
+最终用文档 key 打破平局。
 
-- `'exists'` —— 源字段存在则发 `true`,否则 `false`。适合"默认受保护"的字段。
-- `'sha256'` —— 源字段的 SHA-256,以十六进制字符串输出。适合服务端校验密码而无需发送
-  明文。
-- `'mediaUrl'` —— 源字段对应媒体的解析后 URL。适合存了相对媒体路径的字段。
+投影路径可以读取顶层公开 frontmatter，或以下保留值：
 
-敏感字段在 manifest 中只能被投影为 `'exists'` 或 `'sha256'`。按构造就无法读出明文,详见
-[安全模型](/zh-CN/security/)。
+- `collection`、`file`、`key`、`locale` 和 `slug`
+- `frontmatter.<path>`
+- `derived.<path>`
 
-## cache
+字段值可以是路径字符串，也可以是 `{ from, transform?, default? }`。
+
+| Transform    | 结果                                                                     |
+| ------------ | ------------------------------------------------------------------------ |
+| 无           | 复制源值；不存在时使用 `default`，再不存在则为 `null`。                  |
+| `'exists'`   | 源值存在且非 null 时为 `true`。                                          |
+| `'sha256'`   | 字符串或 JSON 序列化值的小写 SHA-256 hex；缺失时使用 `default` 或 null。 |
+| `'mediaUrl'` | 绝对或外部 URL 原样通过；相对字符串映射为 root-relative URL。            |
+
+列在 `sensitive` 中的顶层字段只能使用 `exists` 或 `sha256`。`mediaUrl` 只是路径投影，不会
+检查文件存在性，也不会创建静态 import。
+
+## 缓存
 
 ```ts
 cache: {
@@ -183,27 +245,28 @@ cache: {
 }
 ```
 
-| 键          | 默认值             | 作用                             |
-| ----------- | ------------------ | -------------------------------- |
-| `directory` | `.amamo-mdx/cache` | 编译记录与高亮器缓存的存放位置。 |
+缓存键是 BLAKE3 digest，输入包括缓存格式、原生 crate 版本、OS、架构、目标模式、归一化配置
+和运行时包版本、源码路径和字节，以及已启用的 `lastModified` 值。命中缓存还要求之前记录的
+所有媒体依赖仍然存在。
 
-缓存键是配置指纹(本身包含包版本、Shiki 版本以及归一化后的配置)与源字节拼接后做 SHA-256。
-设置 `cache: false` 可以完全关闭缓存;编译器仍会生成模块和 manifest。
+损坏记录会被删除并重新编译，同时产生 `AMAMO_CACHE_CORRUPT` warning。成功的完整构建会清理
+已经不再被发现内容引用的记录。
 
-## generatedDirectory
+设置 `cache: false` 可关闭持久化记录。直接 API 和 Vite 仍可编译，但 Next loader 没有缓存
+文件就无法工作。
+
+## 生成产物
 
 ```ts
 generatedDirectory: '.amamo-mdx'
 ```
 
-编译器写入产物的唯一目录。`collections.mjs`、`collections.d.mts`、`index.json` 以及每个
-配置的 manifest 都写在这里。默认把所有东西放在同一个前缀下,方便宿主应用的 `.gitignore`。
+编译器固定在这里写三个共享产物：
 
-## root
+- `collections.mjs`
+- `collections.d.ts`
+- `index.json`
 
-```ts
-root: import.meta.dirname
-```
-
-把配置中所有相对路径解析到这个目录。如果不设置,编译器用 `process.cwd()`。当配置文件不在
-项目根,或者加载配置时 `cwd` 不等于项目根时,需要显式设置。
+缓存和 manifest 位置彼此独立。集合、缓存、生成目录和 manifest 的相对配置路径从 `root` 解析，
+而 Markdown 媒体路径从所在源文档解析。`root` 默认是 `process.cwd()`；已存在的 root 和集合
+目录会在归一化时 canonicalize。只要配置可能从其它工作目录加载，就应显式设置 `root`。

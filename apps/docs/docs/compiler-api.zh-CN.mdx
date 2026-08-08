@@ -1,26 +1,30 @@
 ---
-title: 编译器 API
-description: 用 createCompiler、build、transform、remove、dispose 直接驱动编译器。
-order: 4
+description: 构建完整内容集、应用增量更新、检查结果并释放编译器资源。
 ---
 
-Vite 和 Next 适配器都跑在同一份 `ICompiler` 之上。根 API 把这个接口直接暴露出来,让宿主
-应用可以自己驱动编译器 —— 比如在 Vite 之前先跑一遍的构建脚本、测试夹具,或者一个静态站点
-生成器。
+# 编译器 API
 
-## 构造
+当你自己的脚本或构建系统需要管理生命周期时，使用 `createCompiler`。Vite 和 Next 通过内部
+适配器接口使用同一套实现，但每个创建出的实例都有自己的记录、队列、高亮器和可选 watcher。
+
+## 创建并关闭编译器
 
 ```ts
 import { createCompiler } from '@amamo/mdx'
-import config from './amamo.config.js'
 
-const compiler = await createCompiler(config)
+import amamo from './amamo.config.mjs'
+
+const compiler = await createCompiler(amamo)
+try {
+  const result = await compiler.build()
+  console.log(result)
+} finally {
+  await compiler.dispose()
+}
 ```
 
-`createCompiler` 是异步的,因为要加载原生绑定和配置的高亮器。配置在构造时被归一化,之后再
-改不会被感知。
-
-返回的对象实现 `ICompiler`:
+创建阶段会归一化配置，并在启用高亮时初始化 Shiki。直到第一个需要原生 batch 的 `build()`
+或 `transform()`，原生绑定才会被加载。
 
 ```ts
 interface ICompiler {
@@ -31,14 +35,22 @@ interface ICompiler {
 }
 ```
 
-## build
+同一编译器上的操作会串行执行。并发的 `build()` 共用一次进行中的构建，增量操作在队列中等待。
+
+## `build()`
 
 ```ts
 const result = await compiler.build()
 ```
 
-发现所有集合,解析并校验每条记录,渲染代码块,清理缓存,然后写入生成模块、私有加载器索引
-以及每个配置的 manifest。编译器会合并并发调用,所以快速连调 `build()` 两次是安全的。
+一次完整构建会：
+
+1. 按确定性顺序遍历所有集合。
+2. 推导 locale、slug 和 key，并拒绝重复 key。
+3. 读取全部源码和可选的最后修改时间。
+4. 复用兼容的缓存记录，或执行 Rust/Shiki 编译流水线。
+5. 用完整结果替换编译器的内存记录集。
+6. 写入变化的 manifest 和共享生成文件，再清理过期缓存。
 
 ```ts
 interface IBuildResult {
@@ -49,22 +61,17 @@ interface IBuildResult {
 }
 ```
 
-- `discovered` 是所有集合中发现的 MDX 文件数。
-- `compiled` 是产生了新缓存记录的文件数。
-- `cached` 等于 `discovered - compiled`。
-- `outputsWritten` 是实际写入的生成文件数;其余与现有产物字节一致,未触碰。
+`outputsWritten` 统计字节发生变化的输出文件。没有变化的 warm build 可以返回 0，并保持所有
+输出文件的修改时间不变；缓存记录写入不计入这个数字。
 
-`build()` 涵盖了适配器在启动时做的工作的完整超集。在生成的模块被非 Vite / 非 Next 的
-代码消费时,显式调它很有用。
-
-## transform
+## `transform(file)`
 
 ```ts
-const result = await compiler.transform('content/posts/hello.mdx')
+const result = await compiler.transform('/absolute/path/content/posts/hello.mdx')
 ```
 
-重新解析单个文件,校验其 frontmatter,并写入任何依赖它的生成产物。结果是刚编译的记录,以及
-一个反映底层批处理缓存行为的 `cached` 标记。
+`transform` 编译一个属于集合的文件，替换它的记录，重写受影响的共享产物，并清理不在当前
+编译器状态中的缓存记录。
 
 ```ts
 interface ITransformResult {
@@ -76,61 +83,74 @@ interface ITransformResult {
 }
 ```
 
-`code` 是宿主应用应视为该文档模块体的 JavaScript 源码。`map` 当前总是 `null`,编译器为
-未来的 source map 保留了这个字段。`record` 暴露了解析后的 frontmatter、derived 字段、
-诊断信息、缓存键以及源字节的 SHA-256 哈希。
+- `code` 是编译后的 JavaScript 模块体。
+- `map` 目前始终为 `null`。
+- `record.frontmatter` 不包含顶层敏感字段。
+- `record.derived` 包含启用的阅读时间和最后修改时间。
+- `record.hash` 是源字节的 BLAKE3 digest。
+- `record.cacheKey` 还包含配置、平台、路径和可选修改时间元数据。
+- `record.diagnostics` 包含成功结果的 warning，例如 `warn` 策略下的媒体缺失。
 
-`transform` 在出错时以 `AmamoMdxError` 拒绝,`diagnostics` 字段列出编译器发现的所有问题。
-frontmatter schema 违规、媒体缺失、未知代码块语言都以诊断形式出现。
+请使用绝对路径。相对路径从进程工作目录解析，不会自动从 `config.root` 解析。
 
-## remove
+> 当共享产物必须保留所有文档时，请先运行 `build()`。在全新编译器上直接调用 `transform()`，
+> 会创建只包含该文件的状态。
+
+## `remove(file)`
 
 ```ts
-const removed = await compiler.remove('content/posts/deleted.mdx')
+const outputsWritten = await compiler.remove('/absolute/path/content/posts/deleted.mdx')
 ```
 
-从缓存中移除一个文件,并重写任何引用过它的生成产物。返回实际被重写的生成文件数。对不属于
-任何集合的路径调用 `remove` 是 no-op,返回 `0`。
+`remove` 删除这个编译器已经知道的记录，更新共享产物，清理缓存，并返回变化的输出文件数量。
+未知路径是 no-op，返回 `0`。
 
-`remove` 是 `transform` 在删除侧的对应操作。Vite 和 Next 适配器把它接到底层文件系统的
-watcher 上。
-
-## dispose
+## `dispose()`
 
 ```ts
 await compiler.dispose()
 ```
 
-释放高亮器以及任何打开的文件句柄。`dispose` 之后编译器不可再用;再调其它方法会被拒绝。
-从适配器的视角看,编译器是进程级单例,所以不要把一个已 dispose 的实例跨请求共享。
+释放操作会关闭适配器启动的内部 watcher，并销毁 Shiki。它是幂等的；之后再调用 build、
+transform 或 remove 会以 `AMAMO_COMPILER_DISPOSED` 拒绝。
 
 ## 错误与诊断
 
-大多数失败不以 JavaScript 异常抛出,而是作为 `IDiagnostic[]` 放在 `AmamoMdxError` 里返回:
+不同边界的失败形式不同：
+
+- 非法纯数据配置会抛出 `TypeError`，消息中带 `AMAMO_CONFIG_*` code。
+- 原生解析、schema、媒体、缓存和 manifest 失败会变成名为 `AmamoMdxError` 的错误，并带
+  `diagnostics` 数组。
+- Shiki 初始化和未知语言失败是普通 `Error`。
+- 文件系统、watcher 和 Next loader 失败也是普通 `Error`。
+
+`IDiagnostic` 从 `@amamo/mdx` 导出：
 
 ```ts
-class AmamoMdxError extends Error {
-  readonly diagnostics: IDiagnostic[]
-}
-
 interface IDiagnostic {
   code: string
   file?: string
   hint?: string
   message: string
-  range?: { start; end }
+  range?: {
+    start: { line: number; column: number; offset: number }
+    end: { line: number; column: number; offset: number }
+  }
   severity: 'error' | 'warning'
 }
 ```
 
-编译器自身的内部管道会让外层 `Promise` 拒绝;具体怎么呈现给用户由调用方决定 —— 是单条
-消息,还是 `file:line` 形式的诊断列表,或直接让构建失败。
+这个类型为 `range` 和 `hint` 预留了位置，但当前原生构造器不会填充它们。batch 会在第一篇失败
+文档或第一个失败阶段停止，而不会聚合全部失败。Schema 消息可能引用提交的 frontmatter 值，
+包括后来标记为 sensitive 的字段。
 
-## 生成模块
+## 共享生成文件
 
-`build()` 之后,生成模块位于 `<generatedDirectory>/collections.mjs`。它导出一棵具名
-记录的树,宿主应用可以直接 `import`。配套的 `collections.d.mts` 给 TypeScript 提供了同样
-的形状。
+构建完成后，`generatedDirectory` 包含：
 
-私有加载器索引位于 `<generatedDirectory>/index.json`,Vite 和 Next 适配器用它来按路径
-查找已编译的记录,而不必走公开模块 —— 它们需要的是 key 查找,不是整个 bundle。
+- `collections.mjs`：按顺序排列的 `{ derived, frontmatter, key, locale, slug, load }` 数组。
+- `collections.d.ts`：集合注册表的配套声明产物。
+- `index.json`：Next loader 使用的源码路径、缓存键、缓存目录和配置指纹。
+
+注册表的 `load()` 会 import 原始 MDX 源码。宿主 bundler 仍需配置 Vite 插件、Next loader 或
+其它兼容的 MDX transform。

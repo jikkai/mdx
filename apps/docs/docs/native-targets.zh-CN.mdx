@@ -1,53 +1,83 @@
 ---
-title: 原生目标
-description: 预编译原生二进制列表,以及在不兼容目标上会发生什么。
-order: 8
+description: 受支持的平台包、原生加载错误、Node.js 策略、本地构建和发布验证。
 ---
 
-`@amamo/mdx` 为每个支持的平台预编译原生绑定。绑定通过 `optionalDependencies` 安装;在不
-支持的平台上 install 跳过对应包,在 `createCompiler` 调用时拒绝加载。
+# 原生目标
 
-## 支持的目标
+发布包会根据当前操作系统、架构和 Linux libc 加载一个 napi-rs 二进制。包内不提供 JavaScript
+或 WASI 实现。
 
-| 目标三元组                   | 操作系统 | 架构          |
-| ---------------------------- | -------- | ------------- |
-| `aarch64-apple-darwin`       | macOS    | arm64         |
-| `x86_64-apple-darwin`        | macOS    | x64           |
-| `aarch64-unknown-linux-gnu`  | Linux    | arm64 (glibc) |
-| `x86_64-unknown-linux-gnu`   | Linux    | x64 (glibc)   |
-| `aarch64-unknown-linux-musl` | Linux    | arm64 (musl)  |
-| `x86_64-unknown-linux-musl`  | Linux    | x64 (musl)    |
-| `x86_64-pc-windows-msvc`     | Windows  | x64           |
+## 受支持目标
 
-CI 矩阵在原生 runner 上编译每个目标。macOS x64 用 Intel runner;Linux musl 通过
-`cargo-zigbuild` 加固定版本 Zig 工具链交叉编译。
+| Rust target                  | 平台包                        | 运行环境          |
+| ---------------------------- | ----------------------------- | ----------------- |
+| `aarch64-apple-darwin`       | `@amamo/mdx-darwin-arm64`     | macOS arm64       |
+| `x86_64-apple-darwin`        | `@amamo/mdx-darwin-x64`       | macOS x64         |
+| `aarch64-unknown-linux-gnu`  | `@amamo/mdx-linux-arm64-gnu`  | Linux arm64 glibc |
+| `x86_64-unknown-linux-gnu`   | `@amamo/mdx-linux-x64-gnu`    | Linux x64 glibc   |
+| `aarch64-unknown-linux-musl` | `@amamo/mdx-linux-arm64-musl` | Linux arm64 musl  |
+| `x86_64-unknown-linux-musl`  | `@amamo/mdx-linux-x64-musl`   | Linux x64 musl    |
+| `x86_64-pc-windows-msvc`     | `@amamo/mdx-win32-x64-msvc`   | Windows x64       |
 
-## 不兼容的目标会怎样
+## 绑定何时加载
 
-`createCompiler` 在构造时直接调到原生绑定。如果绑定缺失或加载失败,调用被拒绝。没有
-JavaScript 或 WASI 回退,也没有开关去启用 —— 加回退会改变性能与语言覆盖的形态,而这个决定
-不想默认替用户做。
+`createCompiler()` 会归一化配置，也可能初始化 Shiki，但不会加载 Rust。第一个 `build()` 或
+`transform()` 进入 `prepareNativeBatch` 时，才会 require `native.cjs` 和匹配的二进制。
 
-发布原生包时,在 `napi.targets` 数组里挑一个受支持的目标三元组,让 napi CLI 为当前主机
-编译正确的绑定。
+Loader 先尝试本地 `index.<platform>.node`，再尝试对应平台包。平台包必须与根包版本完全相同。
 
-## Node.js 版本要求
+| 顶层错误                   | 含义                                        |
+| -------------------------- | ------------------------------------------- |
+| `AMAMO_NATIVE_UNSUPPORTED` | OS 或 CPU 没有已知 target 映射。            |
+| `AMAMO_NATIVE_UNAVAILABLE` | target 已知，但本地和平台包绑定都无法加载。 |
 
-包按 Node.js 20.19 及以上版本测试。更老的 Node 缺少编译器依赖的 async hooks 与
-`node:fs/promises` 行为。
+平台包版本不匹配时，`AMAMO_NATIVE_VERSION_MISMATCH` 位于 `AMAMO_NATIVE_UNAVAILABLE` 的
+aggregate cause 中，不是顶层 loader 错误。
 
-## 选高亮器引擎
+如果依赖是在另一台机器上安装的，请在当前目标重新安装。可以复用包管理器缓存，但不要复制
+`node_modules`。
 
-原生绑定在每个目标上都一样。高亮器引擎是另一个选择:
+## Node.js 策略
 
-- `oniguruma` —— 默认。Shiki 的 WASM 引擎,完整语法保真度,启动稍慢。
-- `javascript` —— Shiki 的 JavaScript 引擎。启动更轻,语言集更小。
+根包和平台包声明 Node.js `>=20.19`。仓库 CI 目前在 Node.js 24 上运行完整质量门，再分别使用
+Turbopack 和 Webpack 构建 Next fixture。应把 20.19 视为支持的引擎下限，而不是每个中间
+版本都在 CI 执行过的保证。
 
-在配置的 `highlight` 块里设置引擎。两者在共同覆盖的语言上输出完全一致;差别是语法的
-覆盖范围,不是正确性。
+原生 crate 启用了 N-API 8。
 
-## 自定义目标
+## Shiki 引擎是独立选择
 
-原生绑定是一个普通的 napi-rs 项目。要构建不在上表中的目标,可以用自定义 `--target` 标志
-跑 napi build。CI 矩阵是实际可行性的真相之源;新目标的移植应在发布前先在目标机器上跑
-`cargo test` 验证。
+原生 target 不会选择高亮器引擎，请单独配置 Shiki：
+
+```ts
+highlight: {
+  provider: 'shiki',
+  engine: 'oniguruma', // 或 'javascript'
+  themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
+}
+```
+
+两个值都使用 Shiki 官方引擎实现。切换前请测试实际语言和主题集合；本包不保证两个引擎输出
+逐字节一致。
+
+## 本地构建
+
+仓库在 `rust-toolchain.toml` 固定了 Rust 版本。在受支持的开发机器上运行：
+
+```sh
+pnpm install
+pnpm run build:native
+node scripts/check-artifacts.mjs --local native.cjs
+```
+
+`build:native` 构建当前平台绑定并生成 `native.d.ts`。`pnpm test` 会先重建原生和 TypeScript
+产物，再运行集成测试。
+
+添加 target 不只是传一个 `--target`：还要更新 napi target 列表、原生 loader、平台包、
+artifact 校验器、release matrix 和目标环境的加载验证。
+
+## 发布验证
+
+Release workflow 会在矩阵 runner（musl 使用 Alpine）上构建并加载测试每个原生 artifact。
+随后 publish job 会运行完整质量门、校验所有下载的平台包、dry-run 每个 npm 包，并先发布
+平台包，再发布根包。

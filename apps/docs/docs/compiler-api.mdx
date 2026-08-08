@@ -1,26 +1,31 @@
 ---
-title: Compiler API
-description: Drive the compiler directly with createCompiler, build, transform, remove, and dispose.
-order: 4
+description: Build a complete content set, apply incremental updates, inspect results, and dispose compiler resources.
 ---
 
-The Vite and Next adapters both run on top of the same `ICompiler`. The root API exposes that
-interface so a host application can drive the compiler directly — for example, a build script
-that runs before Vite, a test harness, or a static site generator.
+# Compiler API
 
-## Construction
+Use `createCompiler` when your own script or build system should own the lifecycle. Vite and Next use
+the same implementation through an internal adapter interface, but each created instance keeps its
+own records, queue, highlighter, and optional watcher.
+
+## Create and close a compiler
 
 ```ts
 import { createCompiler } from '@amamo/mdx'
-import config from './amamo.config.js'
 
-const compiler = await createCompiler(config)
+import amamo from './amamo.config.mjs'
+
+const compiler = await createCompiler(amamo)
+try {
+  const result = await compiler.build()
+  console.log(result)
+} finally {
+  await compiler.dispose()
+}
 ```
 
-`createCompiler` is async because it loads the native binding and the configured highlighter. The
-config is normalized on construction; later edits are not picked up.
-
-The returned object implements `ICompiler`:
+Creation normalizes the config and initializes Shiki when highlighting is enabled. The native
+binding is loaded on the first `build()` or `transform()` that needs a native batch.
 
 ```ts
 interface ICompiler {
@@ -31,15 +36,23 @@ interface ICompiler {
 }
 ```
 
-## build
+Operations on one compiler are serialized. Concurrent `build()` calls share one in-flight build;
+incremental operations wait their turn.
+
+## `build()`
 
 ```ts
 const result = await compiler.build()
 ```
 
-Discovers every collection, parses and validates every record, renders code blocks, prunes the
-cache, and writes the generated module, the private loader index, and every configured manifest.
-The compiler coalesces concurrent calls, so calling `build()` twice in quick succession is safe.
+A full build:
+
+1. Walks every collection in deterministic order.
+2. Derives locale, slug, and key metadata and rejects duplicate keys.
+3. Reads every source and optional last-modified value.
+4. Reuses compatible cache records or runs the Rust/Shiki compile pipeline.
+5. Replaces the compiler's complete in-memory record set.
+6. Writes changed manifests and shared generated files, then prunes stale cache entries.
 
 ```ts
 interface IBuildResult {
@@ -50,24 +63,17 @@ interface IBuildResult {
 }
 ```
 
-- `discovered` is the number of MDX files found across all collections.
-- `compiled` is the number of files that produced fresh cache records.
-- `cached` is `discovered - compiled`.
-- `outputsWritten` is the number of generated files actually written; the rest were byte-for-byte
-  identical to the existing output and left untouched.
+`outputsWritten` counts files whose bytes changed. An unchanged warm build can report zero and leave
+all output modification times untouched. Cache-record writes are not included in this count.
 
-`build()` is a superset of the work the adapters do at startup. Calling it explicitly is useful
-when the generated module is consumed by code that is not the Vite or Next adapter.
-
-## transform
+## `transform(file)`
 
 ```ts
-const result = await compiler.transform('content/posts/hello.mdx')
+const result = await compiler.transform('/absolute/path/content/posts/hello.mdx')
 ```
 
-Re-parses a single file, validates its frontmatter, and writes any new generated output that
-depends on it. The result is the freshly compiled record and a `cached` flag that mirrors the
-cache behavior of the underlying batch.
+`transform` compiles one recognized collection file, replaces its record, rewrites affected shared
+outputs, and prunes cache records no longer in the compiler's current state.
 
 ```ts
 interface ITransformResult {
@@ -79,67 +85,75 @@ interface ITransformResult {
 }
 ```
 
-`code` is the JavaScript source the host application should treat as the document's module body.
-`map` is currently always `null`; the compiler reserves the field for a future source map. The
-full `record` exposes the parsed frontmatter, the derived fields, the diagnostics, the cache key,
-and the SHA-256 hash of the input bytes.
+- `code` is the compiled JavaScript module body.
+- `map` is currently always `null`.
+- `record.frontmatter` excludes top-level sensitive fields.
+- `record.derived` contains enabled reading-time and last-modified values.
+- `record.hash` is the BLAKE3 digest of the source bytes.
+- `record.cacheKey` also includes config, platform, path, and optional modification metadata.
+- `record.diagnostics` contains successful warnings such as missing media under the `warn` policy.
 
-`transform` rejects with an `AmamoMdxError` whose `diagnostics` field lists every problem the
-compiler found. Frontmatter schema violations, missing media, and unknown code-block languages all
-surface as diagnostics.
+Use absolute paths. Relative paths resolve from the process working directory, not automatically
+from `config.root`.
 
-## remove
+> Run `build()` first when shared outputs must retain every document. Calling `transform()` on a new
+> compiler creates state containing only that transformed file.
+
+## `remove(file)`
 
 ```ts
-const removed = await compiler.remove('content/posts/deleted.mdx')
+const outputsWritten = await compiler.remove('/absolute/path/content/posts/deleted.mdx')
 ```
 
-Removes a file from the cache and rewrites any generated output that referenced it. Returns the
-number of generated files actually rewritten. Calling `remove` on a path that is not part of any
-collection is a no-op and returns `0`.
+`remove` deletes a record already known to this compiler, updates shared outputs, prunes the cache,
+and returns the number of changed output files. An unknown path is a no-op returning `0`.
 
-`remove` is the delete-side counterpart of `transform`. The Vite and Next adapters wire it to the
-underlying file system watcher.
-
-## dispose
+## `dispose()`
 
 ```ts
 await compiler.dispose()
 ```
 
-Releases the highlighter and any open file handles. After `dispose`, the compiler is unusable;
-calling any other method rejects. The compiler is also a process-wide singleton from the adapter's
-point of view, so do not share a disposed instance across requests.
+Disposal closes the internal watcher when one was started by an adapter and disposes Shiki. It is
+idempotent. Any later build, transform, or remove call rejects with `AMAMO_COMPILER_DISPOSED`.
 
 ## Errors and diagnostics
 
-Most failures are not thrown as JavaScript exceptions; they are returned as `IDiagnostic[]`
-inside an `AmamoMdxError`:
+Different boundaries fail differently:
+
+- Invalid plain-data config throws `TypeError` with an `AMAMO_CONFIG_*` code in its message.
+- Native parsing, schema, media, cache, and manifest failures become an error named
+  `AmamoMdxError` with a `diagnostics` array.
+- Shiki setup and unknown-language failures are ordinary `Error` values.
+- Filesystem, watcher, and Next loader failures are ordinary `Error` values.
+
+`IDiagnostic` is exported from `@amamo/mdx`:
 
 ```ts
-class AmamoMdxError extends Error {
-  readonly diagnostics: IDiagnostic[]
-}
-
 interface IDiagnostic {
   code: string
   file?: string
   hint?: string
   message: string
-  range?: { start; end }
+  range?: {
+    start: { line: number; column: number; offset: number }
+    end: { line: number; column: number; offset: number }
+  }
   severity: 'error' | 'warning'
 }
 ```
 
-The compiler's own plumbing rejects the surrounding `Promise`; it is the caller's job to decide
-whether to surface a single message, a list of file:line diagnostics, or to fail the build.
+The shape reserves `range` and `hint`, but current native constructors do not populate them. A batch
+stops at the first failing document or stage rather than aggregating every failure. Schema messages
+may quote submitted frontmatter values, including fields later marked sensitive.
 
-## Generated module
+## Shared generated files
 
-After `build()` the generated module lives at `<generatedDirectory>/collections.mjs`. It exports
-a tree of named records that the host application can `import` directly. The companion
-`collections.d.mts` provides the same shape to TypeScript.
+After a build, `generatedDirectory` contains:
 
-The private loader index at `<generatedDirectory>/index.json` exposes the same records to the Vite
-and Next adapters without forcing them through the public module — they need a key lookup, not
-the full bundle.
+- `collections.mjs` — sorted arrays of `{ derived, frontmatter, key, locale, slug, load }`.
+- `collections.d.ts` — a companion declaration output for the registry.
+- `index.json` — source path, cache key, cache directory, and config fingerprint for the Next loader.
+
+The registry's `load()` functions import the original MDX sources. A host bundler still needs the
+Vite plugin, Next loader, or another compatible MDX transform.

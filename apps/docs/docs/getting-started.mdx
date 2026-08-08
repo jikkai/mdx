@@ -1,15 +1,20 @@
 ---
-title: Getting started
-description: Install @amamo/mdx, write a config, run a build, and inspect the generated output.
-order: 2
+description: Install @amamo/mdx, define one collection, compile a document, and use the generated output.
 ---
+
+# Getting started
+
+This guide starts with one `content/posts/hello.mdx` file and ends with a host-importable module,
+collection registry, and companion declaration file.
 
 ## Requirements
 
-- **Node.js 20.19 or newer** — the package and its native binding are tested against this floor.
-- **A supported target platform** — `@amamo/mdx` ships prebuilt native binaries for a small set of
-  targets and refuses to load on anything else. See [Native targets](/native-targets/).
-- **Trusted authors** — MDX can contain executable JavaScript. The compiler is not a sandbox.
+- **Node.js 20.19 or newer.** This is the package's declared engine floor; project CI currently runs
+  Node.js 24.
+- **A supported native target.** The binding has no JavaScript or WASI fallback. See [Native
+  targets](/native-targets/).
+- **React 19 in the host application.** The default `jsxImportSource` is `react`.
+- **Trusted MDX authors.** Compiled MDX can execute JavaScript in the host application.
 
 ## Install
 
@@ -17,16 +22,33 @@ order: 2
 pnpm add @amamo/mdx
 ```
 
-A platform-matching native binding is installed through `optionalDependencies`. There is no
-JavaScript or WASI fallback; on an unsupported target the binding fails to load.
+The published root package selects a matching platform package during installation. Do not copy a
+`node_modules` directory between operating systems, CPU architectures, or Linux libc variants.
 
-## Write a config
+## Add a document
 
-Configuration is plain serializable data. Functions and executable plugins are intentionally
-rejected so a config can be cached, hashed, and reproduced by anyone.
+Create the collection directory and a first document:
 
-```ts
-// amamo.config.ts
+```mdx
+---
+title: Hello
+---
+
+# Hello
+
+This document is compiled by @amamo/mdx.
+```
+
+Save it as `content/posts/hello.mdx`.
+
+## Define the collection
+
+Configuration must be plain serializable data. `defineConfig` is an identity helper that exposes the
+config shape to TypeScript-aware tooling; validation and defaults are applied when a compiler or
+adapter is created.
+
+```js
+// amamo.config.mjs
 import { defineConfig } from '@amamo/mdx'
 
 export default defineConfig({
@@ -37,89 +59,135 @@ export default defineConfig({
       schema: {
         $schema: 'https://json-schema.org/draft/2020-12/schema',
         type: 'object',
-        properties: {
-          title: { type: 'string' },
-          password: { type: 'string' },
-        },
+        properties: { title: { type: 'string' } },
         required: ['title'],
       },
-      sensitive: ['password'],
     },
   },
-  highlight: {
-    provider: 'shiki',
-    engine: 'oniguruma',
-    themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
-    unknownLanguage: 'plain',
-  },
-  media: { missing: 'warn' },
   manifests: {
     public: {
       output: '.amamo-mdx/public.json',
-      fields: { key: 'key', title: 'title' },
-    },
-    server: {
-      output: '.amamo-mdx/server.json',
-      key: 'key',
       fields: {
         key: 'key',
-        protected: { from: 'password', transform: 'exists' },
-        passwordHash: { from: 'password', transform: 'sha256' },
+        slug: 'slug',
+        title: 'title',
       },
     },
   },
 })
 ```
 
-The config captures a few distinct concerns at a glance:
+The `content/posts` directory must exist before a full build. Relative collection, cache, generated,
+and manifest paths are resolved from `root`.
 
-- `collections` declares which directories hold content and how it is validated.
-- `highlight` controls the syntax highlighter.
-- `media` decides what happens when a referenced image, video, or source file is missing.
-- `manifests` projects the validated records into JSON files the host application can read.
+## Choose who owns the build
 
-`defineConfig` is a type-level helper only; it returns the input unchanged.
-
-## Compile
+### Vite
 
 ```ts
-import { createCompiler } from '@amamo/mdx'
-import config from './amamo.config.js'
+// vite.config.ts
+import { amamoMdx } from '@amamo/mdx/vite'
+import { defineConfig } from 'vite'
 
-const compiler = await createCompiler(config)
-await compiler.build()
-await compiler.dispose()
+import amamo from './amamo.config.mjs'
+
+export default defineConfig({ plugins: [amamoMdx(amamo)] })
 ```
 
-`build()` writes the generated module, its declaration, the private loader index, and the
-configured manifests to the directory specified by `generatedDirectory` (default
-`.amamo-mdx/`). Unchanged bytes are not rewritten.
+Vite runs a full startup build, transforms imported content directly, and uses its watcher for add,
+change, and unlink events.
 
-## What gets written
+### Next
 
-For the config above and a `content/posts/hello.mdx` with frontmatter `{ title: "Hello" }`, the
-first `build()` produces roughly:
+```ts
+// next.config.ts
+import { withAmamoMdx } from '@amamo/mdx/next'
+
+import amamo from './amamo.config.mjs'
+
+export default withAmamoMdx(amamo)({ reactStrictMode: true })
+```
+
+Next builds the persistent cache before development or production bundling, then registers a
+read-only loader for Turbopack and Webpack. Keep the cache enabled for this adapter.
+
+### Direct API
+
+```js
+// build-content.mjs
+import { createCompiler } from '@amamo/mdx'
+
+import amamo from './amamo.config.mjs'
+
+const compiler = await createCompiler(amamo)
+try {
+  const result = await compiler.build()
+  console.log(result)
+} finally {
+  await compiler.dispose()
+}
+```
+
+Run it with:
+
+```sh
+node build-content.mjs
+```
+
+Call `build()` before `transform()` or `remove()` when generated outputs must represent the whole
+collection. The incremental methods update the compiler's current in-memory record set; they do not
+discover missing siblings by themselves.
+
+## Import content
+
+Inside a configured Vite or Next application, import an MDX file like a module:
+
+```tsx
+import Post, { frontmatter } from './content/posts/hello.mdx'
+
+export function Page() {
+  return (
+    <main>
+      <h1>{frontmatter.title}</h1>
+      <Post />
+    </main>
+  )
+}
+```
+
+Or import the generated collection registry from application code:
+
+```ts
+import { collections } from './.amamo-mdx/collections.mjs'
+
+const hello = collections.posts.find((document) => document.slug === 'hello')
+const module = await hello?.load()
+```
+
+The `load()` function imports the original MDX path, so it must run through a host that has the Vite
+plugin or Next loader configured.
+
+## Generated files
+
+With the config above, the first build writes:
 
 ```text
 .amamo-mdx/
+  cache/
+  collections.d.ts
   collections.mjs
-  collections.d.mts
   index.json
   public.json
-  server.json
-  cache/
 ```
 
-- `collections.mjs` and `collections.d.mts` expose the compiled documents as a regular ES module
-  for the host application.
-- `index.json` is the private loader index used by the Vite and Next adapters to resolve a path
-  to a compiled record without going through the public module.
-- `public.json` and `server.json` are the configured manifests.
-- `cache/` holds the content-addressed compilation records.
+- `collections.mjs` contains sorted metadata and lazy imports.
+- `collections.d.ts` is emitted as a companion declaration file for the registry.
+- `index.json` maps source paths to cache records for the Next loader; Vite does not read it.
+- `cache/` contains reusable compiled records, including highlighted output.
+- `public.json` is the configured manifest. A different `output` may place a manifest elsewhere.
 
-## Continue
+Add `.amamo-mdx/` to the host repository's ignore file. Unchanged shared files and manifests are not
+rewritten.
 
-- Read [Configuration](/configuration/) to learn what each key controls and what its defaults are.
-- Read [Compiler API](/compiler-api/) if you want to drive the compiler yourself instead of using
-  an adapter.
-- Read [Security](/security/) before adding any field that should not appear in shipped bundles.
+Next, read [Configuration](/configuration/) for every default or [Security](/security/) before
+adding sensitive frontmatter.
