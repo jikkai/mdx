@@ -57,7 +57,7 @@
   },
   "devDependencies": {
     "@amamo/oxlint-config": "1.0.0",
-    "@amamo/verso": "1.0.0",
+    "@amamo/verso": "1.0.1",
     "@napi-rs/cli": "3.8.2",
     "@types/node": "26.1.2",
     "@types/react": "19.2.18",
@@ -70,7 +70,7 @@
     "react-dom": "19.2.8",
     "simple-git-hooks": "2.13.1",
     "typescript": "7.0.2",
-    "vite": "8.2.0",
+    "vite": "8.2.1",
     "vitest": "4.1.10"
   },
   "peerDependencies": {
