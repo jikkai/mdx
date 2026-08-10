@@ -8,6 +8,7 @@ use markdown::mdast::{
 use mdxjs::hast::{Element, MdxJsxElement, MdxjsEsm, Node, PropertyValue, Text};
 use serde::Deserialize;
 use serde_json::Value;
+use swc_core::common::{BytePos, DUMMY_SP, Span};
 
 use crate::Diagnostic;
 use crate::config::{MediaMissing, NativeMediaConfig};
@@ -16,6 +17,7 @@ use crate::config::{MediaMissing, NativeMediaConfig};
 pub struct MediaRewrite {
     pub dependencies: Vec<PathBuf>,
     pub diagnostics: Vec<Diagnostic>,
+    pub synthetic_jsx_spans: Vec<Span>,
 }
 
 struct MediaContext<'a> {
@@ -26,6 +28,7 @@ struct MediaContext<'a> {
     file: &'a Path,
     imports: Vec<(String, String)>,
     root: &'a Path,
+    synthetic_jsx_spans: Vec<Span>,
 }
 
 #[derive(Debug)]
@@ -245,6 +248,7 @@ pub fn rewrite_media(
         file,
         imports: vec![],
         root: &normalized_root,
+        synthetic_jsx_spans: vec![],
     };
     rewrite_node(tree, &mut context)?;
     if !context.imports.is_empty()
@@ -274,6 +278,7 @@ pub fn rewrite_media(
     Ok(MediaRewrite {
         dependencies: context.dependencies,
         diagnostics: context.diagnostics,
+        synthetic_jsx_spans: context.synthetic_jsx_spans,
     })
 }
 
@@ -315,6 +320,9 @@ fn rewrite_node(node: &mut Node, context: &mut MediaContext<'_>) -> Result<(), V
     }
 
     if changed {
+        context
+            .synthetic_jsx_spans
+            .push(position_to_span(element.position.as_ref()));
         *node = Node::MdxJsxElement(MdxJsxElement {
             name: Some(element.tag_name.clone()),
             attributes,
@@ -323,6 +331,21 @@ fn rewrite_node(node: &mut Node, context: &mut MediaContext<'_>) -> Result<(), V
         });
     }
     Ok(())
+}
+
+fn position_to_span(position: Option<&markdown::unist::Position>) -> Span {
+    position.map_or(DUMMY_SP, |position| Span {
+        lo: offset_to_byte_pos(position.start.offset),
+        hi: offset_to_byte_pos(position.end.offset),
+    })
+}
+
+fn offset_to_byte_pos(offset: usize) -> BytePos {
+    let offset = u32::try_from(offset)
+        .ok()
+        .and_then(|offset| offset.checked_add(1))
+        .expect("MDX source exceeds SWC's span limit");
+    BytePos(offset)
 }
 
 fn rewrite_url(

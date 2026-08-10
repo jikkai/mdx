@@ -30,6 +30,7 @@ pub struct PreparedMdx {
     pub dependencies: Vec<PathBuf>,
     pub diagnostics: Vec<Diagnostic>,
     pub reading_words: usize,
+    synthetic_jsx_spans: Vec<swc_core::common::Span>,
     pub(crate) tree: mdxjs::hast::Node,
 }
 
@@ -112,6 +113,7 @@ pub fn prepare_mdx(
         dependencies: media.dependencies,
         diagnostics: media.diagnostics,
         reading_words,
+        synthetic_jsx_spans: media.synthetic_jsx_spans,
         tree,
     })
 }
@@ -201,6 +203,9 @@ pub fn finish_mdx(
         &mut explicit_jsxs,
     )
     .map_err(|error| vec![mdx_diagnostic(file, error)])?;
+    for span in prepared.synthetic_jsx_spans {
+        explicit_jsxs.remove(&span);
+    }
     program.module.visit_mut_with(&mut ReactStyleProperties);
     mdxjs::mdx_plugin_recma_document(&mut program, &options, Some(&location))
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
@@ -557,6 +562,9 @@ mod tests {
         assert!(module.contains("_amamoMedia0"));
         assert!(module.contains("./image.png"));
         assert!(module.contains("./authored.png"));
+        assert!(module.contains("img: \"img\""));
+        assert_eq!(module.matches("_jsx(_components.img,").count(), 1);
+        assert_eq!(module.matches("_jsx(\"img\",").count(), 1);
         fs::remove_dir_all(root).unwrap();
     }
 
