@@ -10,10 +10,9 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
 use crate::Diagnostic;
 use crate::config::{
-    NativeCollectionConfig, NativeMathConfig, NativeMdxConfig, NativeMediaConfig,
-    apply_schema_defaults_and_validate,
+    NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig, apply_schema_defaults_and_validate,
 };
-use crate::hast::{remove_table_line_breaks, rewrite_media};
+use crate::hast::{remove_table_line_breaks, rewrite_document_anchors, rewrite_media};
 use crate::math::replace_math;
 
 #[derive(Debug, serde::Serialize)]
@@ -91,17 +90,11 @@ pub fn prepare_mdx(
     file: &str,
     body: &str,
     config: &NativeMdxConfig,
-    math: &NativeMathConfig,
     highlight: bool,
     root: &Path,
     media: &NativeMediaConfig,
 ) -> Result<PreparedMdx, Vec<Diagnostic>> {
-    let mut options = mdx_options(file, config);
-    if math.enabled {
-        options.parse.constructs.math_flow = true;
-        options.parse.constructs.math_text = true;
-        options.parse.math_text_single_dollar = math.single_dollar;
-    }
+    let options = mdx_options(file, config);
     let mut mdast = mdxjs::mdast_util_from_mdx(body, &options)
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
     let reading_words = reading_units(&mdast);
@@ -113,7 +106,8 @@ pub fn prepare_mdx(
         apply_hard_breaks(&mut mdast);
     }
     let mut tree = mdxjs::mdast_util_to_hast(&mdast);
-    replace_math(&mut tree, file, math)?;
+    rewrite_document_anchors(&mut tree, document_id, config.extensions.heading_ids);
+    replace_math(&mut tree, file, &config.math)?;
     remove_table_line_breaks(&mut tree);
     let media = rewrite_media(&mut tree, root, Path::new(file), media)?;
 
@@ -326,6 +320,12 @@ fn mdx_options(file: &str, config: &NativeMdxConfig) -> mdxjs::Options {
     } else {
         Some(config.provider_import_source.clone())
     };
+    options.parse.constructs.gfm_footnote_definition = config.extensions.footnotes;
+    options.parse.constructs.gfm_label_start_footnote = config.extensions.footnotes;
+    options.parse.constructs.gfm_task_list_item = config.extensions.task_lists;
+    options.parse.constructs.math_flow = config.math.enabled;
+    options.parse.constructs.math_text = config.math.enabled;
+    options.parse.math_text_single_dollar = config.math.single_dollar;
     options
 }
 
@@ -441,9 +441,11 @@ mod tests {
     fn compiles_mdx_and_exports_safe_metadata() {
         let source = "import Badge from './badge.js'\n\n# Hello\n\n| a | b |\n| - | - |\n| 1 | 2 |\n\nfirst\nsecond\n\n<Badge />\n";
         let options = NativeMdxConfig {
+            extensions: Default::default(),
             gfm: true,
             hard_breaks: true,
             jsx_import_source: "react".into(),
+            math: NativeMathConfig::default(),
             provider_import_source: String::new(),
         };
         let prepared = prepare_mdx(
@@ -451,7 +453,6 @@ mod tests {
             "/project/hello.mdx",
             source,
             &options,
-            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &NativeMediaConfig::default(),
@@ -480,9 +481,11 @@ mod tests {
     fn gfm_tables_do_not_keep_structure_line_breaks() {
         let source = "| a | b |\n| - | - |\n| 1 | 2 |\n";
         let options = NativeMdxConfig {
+            extensions: Default::default(),
             gfm: true,
             hard_breaks: true,
             jsx_import_source: "react".into(),
+            math: NativeMathConfig::default(),
             provider_import_source: String::new(),
         };
         let prepared = prepare_mdx(
@@ -490,7 +493,6 @@ mod tests {
             "/project/table.mdx",
             source,
             &options,
-            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &NativeMediaConfig::default(),
@@ -504,9 +506,11 @@ mod tests {
     fn hard_breaks_only_replace_newlines_inside_text_nodes() {
         let source = "first\nsecond\n\n# Heading\n\n| a | b |\n| - | - |\n| 1 | 2 |\n";
         let options = NativeMdxConfig {
+            extensions: Default::default(),
             gfm: true,
             hard_breaks: true,
             jsx_import_source: "react".into(),
+            math: NativeMathConfig::default(),
             provider_import_source: String::new(),
         };
         let prepared = prepare_mdx(
@@ -514,7 +518,6 @@ mod tests {
             "/project/hello.mdx",
             source,
             &options,
-            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &NativeMediaConfig::default(),
@@ -542,9 +545,11 @@ mod tests {
         let file = content.join("post.mdx");
         let source = "![alt](./image.png)\n\n<img src=\"./authored.png\" />\n";
         let options = NativeMdxConfig {
+            extensions: Default::default(),
             gfm: true,
             hard_breaks: false,
             jsx_import_source: "react".into(),
+            math: NativeMathConfig::default(),
             provider_import_source: String::new(),
         };
         let media = NativeMediaConfig::default();
@@ -554,7 +559,6 @@ mod tests {
             file.to_str().unwrap(),
             source,
             &options,
-            &NativeMathConfig::default(),
             false,
             &root,
             &media,
@@ -586,9 +590,11 @@ mod tests {
     #[test]
     fn rejects_media_that_escapes_the_project_root() {
         let options = NativeMdxConfig {
+            extensions: Default::default(),
             gfm: true,
             hard_breaks: false,
             jsx_import_source: "react".into(),
+            math: NativeMathConfig::default(),
             provider_import_source: String::new(),
         };
         let media = NativeMediaConfig {
@@ -600,7 +606,6 @@ mod tests {
             "/project/content/post.mdx",
             "![](../../outside.png)",
             &options,
-            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &media,

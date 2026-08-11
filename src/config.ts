@@ -36,16 +36,24 @@ export interface ICollectionConfig {
   slug?: ISlugConfig
 }
 
-export interface IMdxConfig {
-  gfm?: boolean
-  hardBreaks?: boolean
-  jsxImportSource?: string
-  providerImportSource?: string
-}
-
 export interface IMathConfig {
   macros?: Record<string, string>
   singleDollar?: boolean
+}
+
+export interface IMdxExtensionsConfig {
+  footnotes?: boolean
+  headingIds?: boolean
+  taskLists?: boolean
+}
+
+export interface IMdxConfig {
+  extensions?: IMdxExtensionsConfig
+  gfm?: boolean
+  hardBreaks?: boolean
+  jsxImportSource?: string
+  math?: false | IMathConfig
+  providerImportSource?: string
 }
 
 export interface IHighlightConfig {
@@ -92,7 +100,6 @@ export interface IAmamoMdxConfig {
   generatedDirectory?: string
   highlight?: false | IHighlightConfig
   manifests?: Record<string, IManifestConfig>
-  math?: false | IMathConfig
   mdx?: IMdxConfig
   media?: false | IMediaConfig
   root?: string
@@ -143,12 +150,18 @@ export interface INormalizedConfig {
   generatedDirectory: string
   highlight: INormalizedHighlightConfig
   manifests: Record<string, INormalizedManifestConfig>
-  math: {
-    enabled: boolean
-    macros: Record<string, string>
-    singleDollar: boolean
+  mdx: {
+    extensions: Required<IMdxExtensionsConfig>
+    gfm: boolean
+    hardBreaks: boolean
+    jsxImportSource: string
+    math: {
+      enabled: boolean
+      macros: Record<string, string>
+      singleDollar: boolean
+    }
+    providerImportSource: string
   }
-  mdx: Required<IMdxConfig>
   media: INormalizedMediaConfig
   root: string
 }
@@ -239,6 +252,9 @@ export function defineConfig<T extends IAmamoMdxConfig>(config: T): T {
 
 export function normalizeConfig(config: IAmamoMdxConfig): INormalizedConfig {
   assertPlainData(config, 'config', new WeakSet())
+  if (Object.hasOwn(config, 'math')) {
+    throw new TypeError('AMAMO_CONFIG_INVALID: math moved to mdx.math')
+  }
   if (!config.collections || Object.keys(config.collections).length === 0) {
     throw new TypeError('AMAMO_CONFIG_INVALID: collections must not be empty')
   }
@@ -265,29 +281,32 @@ export function normalizeConfig(config: IAmamoMdxConfig): INormalizedConfig {
   )
 
   const highlight = config.highlight === false ? undefined : config.highlight
-  const math = config.math === false ? undefined : config.math
+  const math = config.mdx?.math === false ? undefined : config.mdx?.math
   const media = config.media === false ? undefined : config.media
+  const gfm = config.mdx?.gfm ?? true
 
   let macroBytes = 0
   for (const [name, expansion] of Object.entries(math?.macros ?? {})) {
     if (!name.startsWith('\\')) {
-      throw new TypeError(`AMAMO_CONFIG_INVALID: math.macros.${name} must start with a backslash`)
+      throw new TypeError(
+        `AMAMO_CONFIG_INVALID: mdx.math.macros.${name} must start with a backslash`,
+      )
     }
     if (!MATH_MACRO_NAME.test(name)) {
       throw new TypeError(
-        `AMAMO_CONFIG_INVALID: math.macros.${name} must be one TeX control sequence`,
+        `AMAMO_CONFIG_INVALID: mdx.math.macros.${name} must be one TeX control sequence`,
       )
     }
     const expansionBytes = Buffer.byteLength(expansion)
     if (expansionBytes > MAX_MATH_MACRO_BYTES) {
       throw new TypeError(
-        `AMAMO_CONFIG_INVALID: math.macros.${name} exceeds the ${MAX_MATH_MACRO_BYTES}-byte limit`,
+        `AMAMO_CONFIG_INVALID: mdx.math.macros.${name} exceeds the ${MAX_MATH_MACRO_BYTES}-byte limit`,
       )
     }
     macroBytes += Buffer.byteLength(name) + expansionBytes
     if (macroBytes > MAX_MATH_MACROS_BYTES) {
       throw new TypeError(
-        `AMAMO_CONFIG_INVALID: math.macros exceeds the ${MAX_MATH_MACROS_BYTES}-byte total limit`,
+        `AMAMO_CONFIG_INVALID: mdx.math.macros exceeds the ${MAX_MATH_MACROS_BYTES}-byte total limit`,
       )
     }
   }
@@ -321,15 +340,20 @@ export function normalizeConfig(config: IAmamoMdxConfig): INormalizedConfig {
       unknownLanguage: highlight?.unknownLanguage ?? 'error',
     },
     manifests,
-    math: {
-      enabled: config.math !== undefined && config.math !== false,
-      macros: { ...math?.macros },
-      singleDollar: math?.singleDollar ?? true,
-    },
     mdx: {
-      gfm: config.mdx?.gfm ?? true,
+      extensions: {
+        footnotes: config.mdx?.extensions?.footnotes ?? gfm,
+        headingIds: config.mdx?.extensions?.headingIds ?? false,
+        taskLists: config.mdx?.extensions?.taskLists ?? gfm,
+      },
+      gfm,
       hardBreaks: config.mdx?.hardBreaks ?? false,
       jsxImportSource: config.mdx?.jsxImportSource ?? 'react',
+      math: {
+        enabled: config.mdx?.math !== undefined && config.mdx.math !== false,
+        macros: { ...math?.macros },
+        singleDollar: math?.singleDollar ?? true,
+      },
       providerImportSource: config.mdx?.providerImportSource ?? '',
     },
     media: {

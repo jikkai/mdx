@@ -29,8 +29,7 @@ At least one collection is required.
 | -------------------- | ----------------- | -------------------------------------------------------- |
 | `root`               | `process.cwd()`   | Base for relative configuration paths.                   |
 | `collections`        | required          | Content directories, schemas, locales, and slugs.        |
-| `mdx`                | see below         | MDX parser and JSX runtime options.                      |
-| `math`               | disabled          | Build-time math rendering. Use `{}` to enable.           |
+| `mdx`                | see below         | MDX syntax, math, and JSX runtime options.               |
 | `highlight`          | Shiki enabled     | Syntax highlighting policy. Use `false` to disable.      |
 | `media`              | rewriting enabled | Markdown media import policy. Use `false` to disable.    |
 | `derived`            | all disabled      | Reading time and last-modified metadata.                 |
@@ -98,36 +97,69 @@ collection.
 
 ```ts
 mdx: {
+  extensions: {
+    footnotes: true,
+    headingIds: false,
+    taskLists: true,
+  },
   gfm: true,
   hardBreaks: false,
   jsxImportSource: 'react',
+  math: false,
   providerImportSource: '',
 }
 ```
 
 | Key                    | Default   | Behavior                                                                |
 | ---------------------- | --------- | ----------------------------------------------------------------------- |
-| `gfm`                  | `true`    | Enables GFM tables, task lists, autolinks, and related syntax.          |
+| `extensions`           | see below | Optional Markdown syntax.                                               |
+| `gfm`                  | `true`    | Enables the GFM bundle; footnotes and task lists can override it.       |
 | `hardBreaks`           | `false`   | Converts newlines inside text nodes to `<br>` elements.                 |
 | `jsxImportSource`      | `'react'` | JSX runtime package used by compiled modules.                           |
+| `math`                 | disabled  | Build-time math parsing and rendering. Use `{}` to enable.              |
 | `providerImportSource` | `''`      | Optional MDX component-provider import; empty means no provider import. |
 
 Authored ESM and MDX JSX remain part of the compiled module. `providerImportSource` controls MDX
 component-provider wiring; it is not a switch for preserving or stripping JSX.
 
+### Markdown extensions
+
+Each supported extension is independently optional:
+
+| Key          | Default      | Behavior                                  |
+| ------------ | ------------ | ----------------------------------------- |
+| `footnotes`  | inherits GFM | `Reference[^id]` and `[^id]: Definition`. |
+| `headingIds` | `false`      | Derives IDs from static heading text.     |
+| `taskLists`  | inherits GFM | `- [ ] Todo` and `- [x] Done`.            |
+
+`footnotes` and `taskLists` use their explicit value when present; otherwise they follow `gfm`.
+This allows either feature to be enabled while the rest of GFM is off, or disabled while tables,
+autolinks, and other GFM syntax remain on.
+
+Generated footnote anchors are namespaced by document, so rendering multiple compiled documents on
+one page does not duplicate their IDs. Automatic heading IDs lowercase text, preserve Unicode
+letters and numbers, replace other runs with hyphens, and append `-2`, `-3`, and so on for
+duplicates. Use an authored MDX heading such as `<h2 id="custom-id">Heading</h2>` when the ID must be
+fixed manually.
+
+No shorthand is added for marks, subscripts, superscripts, or definition lists. Standard MDX
+elements such as `<mark>`, `<sub>`, `<sup>`, and `<dl>` remain available without configuration.
+
 ## Math
 
 ```ts
-math: {
-  singleDollar: true,
-  macros: {
-    '\\RR': '\\mathbb{R}',
+mdx: {
+  math: {
+    singleDollar: true,
+    macros: {
+      '\\RR': '\\mathbb{R}',
+    },
   },
-}
+},
 ```
 
-Math syntax is opt-in. Set `math: {}` to render inline `$x$` and display `$$` expressions, or
-`math: false` to keep dollar signs as ordinary text. `singleDollar: false` disables the `$x$`
+Math syntax is opt-in. Set `mdx.math: {}` to render inline `$x$` and display `$$` expressions, or
+`mdx.math: false` to keep dollar signs as ordinary text. `singleDollar: false` disables the `$x$`
 inline form, which is useful for prose containing currency. With the default enabled, write a
 literal currency sign as `\$`.
 

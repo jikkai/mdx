@@ -154,12 +154,12 @@ test('changes cache keys when math macros change', () => {
   const natural = normalizeConfig({
     ...sourceConfig,
     highlight: false,
-    math: { macros: { '\\numberSet': '\\mathbb{N}' } },
+    mdx: { ...sourceConfig.mdx, math: { macros: { '\\numberSet': '\\mathbb{N}' } } },
   })
   const real = normalizeConfig({
     ...sourceConfig,
     highlight: false,
-    math: { macros: { '\\numberSet': '\\mathbb{R}' } },
+    mdx: { ...sourceConfig.mdx, math: { macros: { '\\numberSet': '\\mathbb{R}' } } },
   })
 
   const naturalKey = prepareNativeBatch(natural, [input]).finish([])[0]?.cacheKey
@@ -171,7 +171,7 @@ test('changes cache keys when math macros change', () => {
 test('renders configured math as self-contained SVG without shifting Shiki blocks', async () => {
   const mathConfig = normalizeConfig({
     ...sourceConfig,
-    math: { macros: { '\\RR': '\\mathbb{R}' } },
+    mdx: { ...sourceConfig.mdx, math: { macros: { '\\RR': '\\mathbb{R}' } } },
   })
   const batch = prepareNativeBatch(mathConfig, [
     {
@@ -203,7 +203,10 @@ test('renders configured math as self-contained SVG without shifting Shiki block
 })
 
 test('reports invalid math through the native diagnostic interface', () => {
-  const mathConfig = normalizeConfig({ ...sourceConfig, math: {} })
+  const mathConfig = normalizeConfig({
+    ...sourceConfig,
+    mdx: { ...sourceConfig.mdx, math: {} },
+  })
 
   assert.throws(
     () =>
@@ -232,7 +235,7 @@ test('keeps fenced math code separate from rendered formulas', async () => {
       themes: { dark: 'vitesse-dark', light: 'vitesse-light' },
       unknownLanguage: 'plain',
     },
-    math: {},
+    mdx: { ...sourceConfig.mdx, math: {} },
   })
   const batch = prepareNativeBatch(mathConfig, [
     {
@@ -256,7 +259,10 @@ test('keeps fenced math code separate from rendered formulas', async () => {
 })
 
 test('can disable single-dollar inline math without disabling display math', () => {
-  const mathConfig = normalizeConfig({ ...sourceConfig, math: { singleDollar: false } })
+  const mathConfig = normalizeConfig({
+    ...sourceConfig,
+    mdx: { ...sourceConfig.mdx, math: { singleDollar: false } },
+  })
   const batch = prepareNativeBatch(mathConfig, [
     {
       collection: 'posts',
@@ -270,6 +276,134 @@ test('can disable single-dollar inline math without disabling display math', () 
   assert.match(module, /Costs \$5 today/)
   assert.match(module, /amamo-math-display/)
   assert.doesNotMatch(module, /amamo-math-inline/)
+})
+
+test('adds stable automatic heading IDs only when enabled', () => {
+  const headings =
+    '## Route *Planning*\n\n## Route Planning\n\n## 路线 规划\n\n## ![Route map](https://example.com/map.png)\n'
+  const source = `---\ntitle: Extensions\n---\n<h2 id="route-planning">Manual route</h2>\n\n${headings}`
+  const extensionConfig = normalizeConfig({
+    ...sourceConfig,
+    highlight: false,
+    mdx: {
+      extensions: { headingIds: true },
+    },
+  })
+  const module = prepareNativeBatch(extensionConfig, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/extensions.mdx',
+      key: 'extensions',
+      source,
+    },
+  ]).finish([])[0]?.module
+
+  assert.match(module ?? '', /id: "route-planning"/)
+  assert.match(module ?? '', /id: "route-planning-2"/)
+  assert.match(module ?? '', /id: "route-planning-3"/)
+  assert.match(module ?? '', /id: "路线-规划"/)
+  assert.match(module ?? '', /id: "route-map"/)
+
+  const disabledModule = prepareNativeBatch(
+    normalizeConfig({ ...sourceConfig, highlight: false }),
+    [
+      {
+        collection: 'posts',
+        file: '/project/content/posts/default-headings.mdx',
+        key: 'default-headings',
+        source: `---\ntitle: Extensions\n---\n${headings}`,
+      },
+    ],
+  ).finish([])[0]?.module
+
+  assert.doesNotMatch(disabledModule ?? '', /id: "(?:route-planning|路线-规划|route-map)"/)
+})
+
+test('lets footnotes and task lists override the GFM bundle', () => {
+  const source =
+    '---\ntitle: GFM overrides\n---\n| a | b |\n| - | - |\n| 1 | 2 |\n\n- [x] Done\n\nReference[^note].\n\n[^note]: Footnote.\n'
+  const enabled = normalizeConfig({
+    ...sourceConfig,
+    highlight: false,
+    mdx: {
+      extensions: { footnotes: true, taskLists: true },
+      gfm: false,
+    },
+  })
+  const enabledModule = prepareNativeBatch(enabled, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/enabled-gfm-parts.mdx',
+      key: 'enabled-gfm-parts',
+      source,
+    },
+  ]).finish([])[0]?.module
+
+  assert.match(enabledModule ?? '', /type: "checkbox"/)
+  assert.match(enabledModule ?? '', /"data-footnotes": true/)
+  assert.doesNotMatch(enabledModule ?? '', /_components\.table/)
+
+  const disabled = normalizeConfig({
+    ...sourceConfig,
+    highlight: false,
+    mdx: {
+      extensions: { footnotes: false, taskLists: false },
+      gfm: true,
+    },
+  })
+  const disabledModule = prepareNativeBatch(disabled, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/disabled-gfm-parts.mdx',
+      key: 'disabled-gfm-parts',
+      source,
+    },
+  ]).finish([])[0]?.module
+
+  assert.doesNotMatch(disabledModule ?? '', /type: "checkbox"/)
+  assert.doesNotMatch(disabledModule ?? '', /data-footnote-ref|data-footnotes/)
+  assert.match(disabledModule ?? '', /_components\.table/)
+})
+
+test('namespaces footnote anchors per document', () => {
+  const footnoteConfig = normalizeConfig({ ...sourceConfig, highlight: false })
+  const source =
+    '---\ntitle: Notes\n---\nReference[^note], then reuse it[^note].\n\n[^note]: Footnote.\n'
+  const modules = prepareNativeBatch(footnoteConfig, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/first.mdx',
+      key: 'first',
+      source,
+    },
+    {
+      collection: 'posts',
+      file: '/project/content/posts/second.mdx',
+      key: 'second',
+      source,
+    },
+  ]).finish([])
+  const first = modules[0]?.module ?? ''
+  const second = modules[1]?.module ?? ''
+  const firstTarget = /href: "#([^"]+-note)"/.exec(first)?.[1]
+  const secondTarget = /href: "#([^"]+-note)"/.exec(second)?.[1]
+
+  assert.ok(firstTarget)
+  assert.ok(secondTarget)
+  assert.notEqual(firstTarget, secondTarget)
+  assert.match(first, new RegExp(`id: "${firstTarget}"`))
+  assert.match(second, new RegExp(`id: "${secondTarget}"`))
+  const firstReference = /id: "(fnref-[^"]+-note)"/.exec(first)?.[1]
+  const secondReference = /id: "(fnref-[^"]+-note-2)"/.exec(first)?.[1]
+  const footnoteLabel = /id: "(footnote-label-[^"]+)"/.exec(first)?.[1]
+  assert.ok(firstReference)
+  assert.ok(secondReference)
+  assert.ok(footnoteLabel)
+  assert.match(first, new RegExp(`href: "#${firstReference}"`))
+  assert.match(first, new RegExp(`href: "#${secondReference}"`))
+  assert.match(first, new RegExp(`"aria-describedby": "${footnoteLabel}"`))
+  assert.doesNotMatch(first, /id: "#fn-/)
+  assert.doesNotMatch(second, /id: "#fn-/)
 })
 
 test('persists safe records and recovers a corrupt cache entry', async () => {

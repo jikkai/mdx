@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -125,6 +125,191 @@ pub fn remove_table_line_breaks(node: &mut Node) {
         children.retain(|child| !matches!(child, Node::Text(text) if text.value == "\n"));
     }
     children.iter_mut().for_each(remove_table_line_breaks);
+}
+
+pub fn rewrite_document_anchors(tree: &mut Node, document_id: &str, heading_ids: bool) {
+    let namespace = blake3::hash(document_id.as_bytes()).to_hex().to_string();
+    rewrite_footnote_anchors(tree, &namespace, false);
+    if heading_ids {
+        add_heading_ids(tree);
+    }
+}
+
+fn rewrite_footnote_anchors(node: &mut Node, namespace: &str, inside_footnotes: bool) {
+    let mut child_is_inside_footnotes = inside_footnotes;
+    if let Node::Element(element) = node {
+        child_is_inside_footnotes |=
+            element.tag_name == "section" && has_boolean_property(element, "dataFootnotes");
+
+        if element.tag_name == "a" && has_boolean_property(element, "dataFootnoteRef") {
+            namespace_property(element, "href", "#fn-", "#fn-", namespace);
+            namespace_property(element, "id", "fnref-", "fnref-", namespace);
+            if let Some(value) = string_property_mut(element, "ariaDescribedBy")
+                && value == "footnote-label"
+            {
+                *value = format!("footnote-label-{namespace}");
+            }
+        } else if element.tag_name == "a" && has_boolean_property(element, "dataFootnoteBackref") {
+            namespace_property(element, "href", "#fnref-", "#fnref-", namespace);
+        } else if child_is_inside_footnotes && element.tag_name == "h2" {
+            if let Some(value) = string_property_mut(element, "id")
+                && value == "footnote-label"
+            {
+                *value = format!("footnote-label-{namespace}");
+            }
+        } else if child_is_inside_footnotes && element.tag_name == "li" {
+            namespace_property(element, "id", "#fn-", "fn-", namespace);
+        }
+    }
+
+    if let Some(children) = node.children_mut() {
+        for child in children {
+            rewrite_footnote_anchors(child, namespace, child_is_inside_footnotes);
+        }
+    }
+}
+
+fn namespace_property(
+    element: &mut Element,
+    property: &str,
+    source_prefix: &str,
+    target_prefix: &str,
+    namespace: &str,
+) {
+    if let Some(value) = string_property_mut(element, property)
+        && let Some(suffix) = value.strip_prefix(source_prefix)
+    {
+        *value = format!("{target_prefix}{namespace}-{suffix}");
+    }
+}
+
+fn has_boolean_property(element: &Element, expected: &str) -> bool {
+    element
+        .properties
+        .iter()
+        .any(|(name, value)| name == expected && matches!(value, PropertyValue::Boolean(true)))
+}
+
+fn string_property_mut<'a>(element: &'a mut Element, expected: &str) -> Option<&'a mut String> {
+    element
+        .properties
+        .iter_mut()
+        .find_map(|(name, value)| match value {
+            PropertyValue::String(value) if name == expected => Some(value),
+            _ => None,
+        })
+}
+
+fn add_heading_ids(tree: &mut Node) {
+    let mut used = HashSet::new();
+    collect_element_ids(tree, &mut used);
+    add_heading_ids_inner(tree, &mut used);
+}
+
+fn collect_element_ids(node: &Node, used: &mut HashSet<String>) {
+    let id = match node {
+        Node::Element(element) => element
+            .properties
+            .iter()
+            .find_map(|(name, value)| match value {
+                PropertyValue::String(value) if name == "id" => Some(value),
+                _ => None,
+            }),
+        Node::MdxJsxElement(element) => element.attributes.iter().find_map(|attribute| {
+            let AttributeContent::Property(attribute) = attribute else {
+                return None;
+            };
+            match &attribute.value {
+                Some(AttributeValue::Literal(value)) if attribute.name == "id" => Some(value),
+                _ => None,
+            }
+        }),
+        _ => None,
+    };
+    if let Some(id) = id {
+        used.insert(id.clone());
+    }
+    if let Some(children) = node.children() {
+        for child in children {
+            collect_element_ids(child, used);
+        }
+    }
+}
+
+fn add_heading_ids_inner(node: &mut Node, used: &mut HashSet<String>) {
+    if let Node::Element(element) = node
+        && matches!(
+            element.tag_name.as_str(),
+            "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
+        )
+        && !element.properties.iter().any(|(name, _)| name == "id")
+    {
+        let mut text = String::new();
+        for child in &element.children {
+            collect_text(child, &mut text);
+        }
+        let base = heading_slug(&text);
+        if !base.is_empty() {
+            let mut id = base.clone();
+            let mut duplicate = 2;
+            while used.contains(&id) {
+                id = format!("{base}-{duplicate}");
+                duplicate += 1;
+            }
+            used.insert(id.clone());
+            element
+                .properties
+                .push(("id".into(), PropertyValue::String(id)));
+        }
+    }
+
+    if let Some(children) = node.children_mut() {
+        for child in children {
+            add_heading_ids_inner(child, used);
+        }
+    }
+}
+
+fn collect_text(node: &Node, output: &mut String) {
+    match node {
+        Node::Text(text) => output.push_str(&text.value),
+        Node::Element(element) if element.tag_name == "img" => {
+            if let Some(alt) = element
+                .properties
+                .iter()
+                .find_map(|(name, value)| match value {
+                    PropertyValue::String(value) if name == "alt" => Some(value),
+                    _ => None,
+                })
+            {
+                output.push_str(alt);
+            }
+        }
+        _ => {
+            if let Some(children) = node.children() {
+                for child in children {
+                    collect_text(child, output);
+                }
+            }
+        }
+    }
+}
+
+fn heading_slug(value: &str) -> String {
+    let mut slug = String::new();
+    let mut separator = false;
+    for character in value.chars().flat_map(char::to_lowercase) {
+        if character.is_alphanumeric() {
+            if separator && !slug.is_empty() {
+                slug.push('-');
+            }
+            slug.push(character);
+            separator = false;
+        } else if !slug.is_empty() {
+            separator = true;
+        }
+    }
+    slug
 }
 
 fn wire_node(wire: HastWire) -> Result<Node, Vec<Diagnostic>> {

@@ -26,6 +26,11 @@ test('normalizes plain configuration and rejects executable values', () => {
   assert.equal(normalized.generatedDirectory, '/project/.amamo-mdx')
   assert.equal(normalized.cache.directory, '/project/.amamo-mdx/cache')
   assert.equal(normalized.mdx.gfm, true)
+  assert.deepEqual(normalized.mdx.extensions, {
+    footnotes: true,
+    headingIds: false,
+    taskLists: true,
+  })
   assert.equal(normalized.highlight.unknownLanguage, 'error')
   assert.throws(
     () => normalizeConfig({ ...config, derived: { readingTime: (() => true) as never } }),
@@ -60,30 +65,98 @@ test('normalizes math configuration', () => {
     },
   })
 
-  assert.deepEqual(normalizeConfig(config).math, {
+  assert.deepEqual(normalizeConfig(config).mdx.math, {
     enabled: false,
     macros: {},
     singleDollar: true,
   })
-  assert.deepEqual(normalizeConfig({ ...config, math: false }).math, {
+  assert.deepEqual(normalizeConfig({ ...config, mdx: { math: false } }).mdx.math, {
     enabled: false,
     macros: {},
     singleDollar: true,
   })
-  assert.deepEqual(normalizeConfig({ ...config, math: {} }).math, {
+  assert.deepEqual(normalizeConfig({ ...config, mdx: { math: {} } }).mdx.math, {
     enabled: true,
     macros: {},
     singleDollar: true,
   })
 
   const macros = { '\\RR': '\\mathbb{R}' }
-  const normalized = normalizeConfig({ ...config, math: { macros, singleDollar: false } })
-  assert.deepEqual(normalized.math, {
+  const normalized = normalizeConfig({
+    ...config,
+    mdx: { math: { macros, singleDollar: false } },
+  })
+  assert.deepEqual(normalized.mdx.math, {
     enabled: true,
     macros,
     singleDollar: false,
   })
-  assert.notEqual(normalized.math.macros, macros)
+  assert.notEqual(normalized.mdx.math.macros, macros)
+})
+
+test('rejects the removed top-level math location', () => {
+  const config = {
+    root: '/project',
+    collections: {
+      posts: {
+        directory: 'content/posts',
+        schema: { type: 'object' },
+      },
+    },
+    math: {},
+  }
+
+  assert.throws(
+    () => normalizeConfig(config as never),
+    /AMAMO_CONFIG_INVALID: math moved to mdx\.math/,
+  )
+})
+
+test('normalizes optional MDX extensions with GFM inheritance', () => {
+  const config = defineConfig({
+    root: '/project',
+    collections: {
+      posts: {
+        directory: 'content/posts',
+        schema: { type: 'object' },
+      },
+    },
+  })
+
+  assert.deepEqual(normalizeConfig({ ...config, mdx: { gfm: false } }).mdx.extensions, {
+    footnotes: false,
+    headingIds: false,
+    taskLists: false,
+  })
+  assert.deepEqual(
+    normalizeConfig({
+      ...config,
+      mdx: {
+        gfm: false,
+        extensions: {
+          footnotes: true,
+          headingIds: true,
+          taskLists: true,
+        },
+      },
+    }).mdx.extensions,
+    {
+      footnotes: true,
+      headingIds: true,
+      taskLists: true,
+    },
+  )
+  assert.deepEqual(
+    normalizeConfig({
+      ...config,
+      mdx: { extensions: { footnotes: false, taskLists: false } },
+    }).mdx.extensions,
+    {
+      footnotes: false,
+      headingIds: false,
+      taskLists: false,
+    },
+  )
 })
 
 test('rejects math macro names without a leading backslash', () => {
@@ -95,12 +168,12 @@ test('rejects math macro names without a leading backslash', () => {
         schema: { type: 'object' },
       },
     },
-    math: { macros: { RR: '\\mathbb{R}' } },
+    mdx: { math: { macros: { RR: '\\mathbb{R}' } } },
   })
 
   assert.throws(
     () => normalizeConfig(config),
-    /AMAMO_CONFIG_INVALID: math\.macros\.RR must start with a backslash/,
+    /AMAMO_CONFIG_INVALID: mdx\.math\.macros\.RR must start with a backslash/,
   )
 })
 
@@ -128,23 +201,23 @@ test('bounds configured math macro bytes', () => {
   exactLimit[finalName] = 'x'.repeat(16384 - usedBytes - finalName.length)
 
   assert.deepEqual(
-    normalizeConfig({ ...config, math: { macros: exactLimit } }).math.macros,
+    normalizeConfig({ ...config, mdx: { math: { macros: exactLimit } } }).mdx.math.macros,
     exactLimit,
   )
   assert.throws(
     () =>
       normalizeConfig({
         ...config,
-        math: { macros: { '\\oversized': 'é'.repeat(513) } },
+        mdx: { math: { macros: { '\\oversized': 'é'.repeat(513) } } },
       }),
-    /AMAMO_CONFIG_INVALID: math\.macros\.\\oversized exceeds the 1024-byte limit/,
+    /AMAMO_CONFIG_INVALID: mdx\.math\.macros\.\\oversized exceeds the 1024-byte limit/,
   )
   assert.throws(
     () =>
       normalizeConfig({
         ...config,
-        math: { macros: { ...exactLimit, '\\extra': '' } },
+        mdx: { math: { macros: { ...exactLimit, '\\extra': '' } } },
       }),
-    /AMAMO_CONFIG_INVALID: math\.macros exceeds the 16384-byte total limit/,
+    /AMAMO_CONFIG_INVALID: mdx\.math\.macros exceeds the 16384-byte total limit/,
   )
 })

@@ -8,6 +8,7 @@ export type {
   IManifestConfig,
   IMathConfig,
   IMdxConfig,
+  IMdxExtensionsConfig,
   IMediaConfig,
   INormalizedConfig,
   JsonValue,

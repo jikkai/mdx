@@ -342,7 +342,6 @@ pub fn prepare_batch(config_json: String, inputs_json: String) -> Result<Prepare
             &input.file,
             &parsed.body,
             &config.mdx,
-            &config.math,
             config.highlight.enabled,
             Path::new(&config.root),
             &config.media,

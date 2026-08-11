@@ -22,8 +22,6 @@ pub struct NativeConfig {
     pub derived: NativeDerivedConfig,
     pub highlight: NativeHighlightConfig,
     pub manifests: HashMap<String, NativeManifestConfig>,
-    #[serde(default)]
-    pub math: NativeMathConfig,
     pub media: NativeMediaConfig,
     pub mdx: NativeMdxConfig,
     pub root: String,
@@ -87,10 +85,20 @@ pub enum SortDirection {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NativeMdxConfig {
+    pub extensions: NativeMdxExtensionsConfig,
     pub gfm: bool,
     pub hard_breaks: bool,
     pub jsx_import_source: String,
+    pub math: NativeMathConfig,
     pub provider_import_source: String,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeMdxExtensionsConfig {
+    pub footnotes: bool,
+    pub heading_ids: bool,
+    pub task_lists: bool,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -224,13 +232,44 @@ fn apply_defaults(instance: &mut Value, schema: &Value) {
 mod tests {
     use serde_json::json;
 
-    use super::{NativeCollectionConfig, apply_schema_defaults_and_validate};
+    use super::{NativeCollectionConfig, NativeMdxConfig, apply_schema_defaults_and_validate};
 
     fn collection(schema: serde_json::Value) -> NativeCollectionConfig {
         NativeCollectionConfig {
             schema,
             sensitive: vec!["password".into()],
         }
+    }
+
+    #[test]
+    fn reads_math_and_extensions_from_mdx_configuration() {
+        let config = serde_json::from_value::<NativeMdxConfig>(json!({
+            "extensions": {
+                "footnotes": false,
+                "headingIds": true,
+                "taskLists": false
+            },
+            "gfm": true,
+            "hardBreaks": false,
+            "jsxImportSource": "react",
+            "math": {
+                "enabled": true,
+                "macros": { "\\RR": "\\mathbb{R}" },
+                "singleDollar": false
+            },
+            "providerImportSource": ""
+        }))
+        .unwrap();
+
+        assert!(!config.extensions.footnotes);
+        assert!(config.extensions.heading_ids);
+        assert!(!config.extensions.task_lists);
+        assert!(config.math.enabled);
+        assert_eq!(
+            config.math.macros.get("\\RR").map(String::as_str),
+            Some("\\mathbb{R}")
+        );
+        assert!(!config.math.single_dollar);
     }
 
     #[test]

@@ -28,8 +28,7 @@ export default defineConfig({
 | -------------------- | --------------- | ------------------------------------------------ |
 | `root`               | `process.cwd()` | 相对配置路径的基准目录。                         |
 | `collections`        | 必填            | 内容目录、schema、locale 和 slug。               |
-| `mdx`                | 见下文          | MDX 解析和 JSX runtime 选项。                    |
-| `math`               | 关闭            | 构建期数学渲染；设为 `{}` 启用。                 |
+| `mdx`                | 见下文          | MDX 语法、数学公式和 JSX runtime 选项。          |
 | `highlight`          | 启用 Shiki      | 语法高亮策略；设为 `false` 可禁用。              |
 | `media`              | 启用重写        | Markdown 媒体 import 策略；设为 `false` 可禁用。 |
 | `derived`            | 全部关闭        | 阅读时间和最后修改时间。                         |
@@ -93,36 +92,67 @@ posts/index.mdx          -> slug "/",     key "en:/",     locale "en"
 
 ```ts
 mdx: {
+  extensions: {
+    footnotes: true,
+    headingIds: false,
+    taskLists: true,
+  },
   gfm: true,
   hardBreaks: false,
   jsxImportSource: 'react',
+  math: false,
   providerImportSource: '',
 }
 ```
 
 | 键                     | 默认值    | 行为                                                  |
 | ---------------------- | --------- | ----------------------------------------------------- |
-| `gfm`                  | `true`    | 启用 GFM 表格、任务列表、自动链接等语法。             |
+| `extensions`           | 见下文    | 可选 Markdown 语法。                                  |
+| `gfm`                  | `true`    | 启用整套 GFM；脚注与任务列表可以单独覆盖。            |
 | `hardBreaks`           | `false`   | 把文本节点内的换行转换成 `<br>`。                     |
 | `jsxImportSource`      | `'react'` | 编译模块使用的 JSX runtime 包。                       |
+| `math`                 | 关闭      | 构建期数学解析与渲染；设为 `{}` 启用。                |
 | `providerImportSource` | `''`      | 可选的 MDX 组件 provider import；空字符串表示不导入。 |
 
 手写的 ESM 和 MDX JSX 仍会进入编译模块。`providerImportSource` 控制 MDX 组件 provider 的
 接线，不是保留或删除 JSX 的开关。
 
+### Markdown 扩展
+
+每项受支持的扩展都可以独立启用：
+
+| 键           | 默认值   | 行为                           |
+| ------------ | -------- | ------------------------------ |
+| `footnotes`  | 继承 GFM | `引用[^id]` 与 `[^id]: 定义`。 |
+| `headingIds` | `false`  | 根据静态标题文字生成 ID。      |
+| `taskLists`  | 继承 GFM | `- [ ] 待办` 与 `- [x] 完成`。 |
+
+显式设置 `footnotes` 或 `taskLists` 时以显式值为准，否则它们跟随 `gfm`。因此可以在关闭其余
+GFM 语法时单独启用它们，也可以在保留表格、自动链接等 GFM 语法时单独关闭。
+
+生成的脚注锚点会按文档增加命名空间，因此同一页面渲染多篇编译文档时不会产生重复 ID。自动
+标题 ID 会把文字转成小写、保留 Unicode 字母与数字、把其余连续字符替换为连字符，并为重复
+标题追加 `-2`、`-3`。需要手动固定 ID 时，可以直接写
+`<h2 id="custom-id">标题</h2>`。
+
+这里不额外定义高亮、上下标或定义列表的缩写语法；无需配置即可直接使用标准 MDX 元素
+`<mark>`、`<sub>`、`<sup>` 与 `<dl>`。
+
 ## 数学公式
 
 ```ts
-math: {
-  singleDollar: true,
-  macros: {
-    '\\RR': '\\mathbb{R}',
+mdx: {
+  math: {
+    singleDollar: true,
+    macros: {
+      '\\RR': '\\mathbb{R}',
+    },
   },
-}
+},
 ```
 
-数学语法需要显式启用。`math: {}` 会渲染行内 `$x$` 与块级 `$$` 公式；`math: false` 会把美元
-符号继续当成普通文字。`singleDollar: false` 可关闭 `$x$` 行内形式，适合货币内容较多的站点。
+数学语法需要显式启用。`mdx.math: {}` 会渲染行内 `$x$` 与块级 `$$` 公式；`mdx.math: false`
+会把美元符号继续当成普通文字。`singleDollar: false` 可关闭 `$x$` 行内形式，适合货币内容较多的站点。
 使用默认值时，文字中的美元符号应写成 `\$`。
 
 `macros` 把单个 TeX 控制序列映射到固定展开值。每个展开值不超过 1 KiB，命令名与展开值合计
