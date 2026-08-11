@@ -225,8 +225,22 @@ fn is_code_block(node: &Node) -> bool {
         node,
         Node::Element(element)
             if element.tag_name == "pre"
-                && matches!(element.children.first(), Some(Node::Element(code)) if code.tag_name == "code")
+                && matches!(
+                    element.children.first(),
+                    Some(Node::Element(code))
+                        if code.tag_name == "code" && !has_class(code, "math-display")
+                )
     )
+}
+
+fn has_class(element: &Element, expected: &str) -> bool {
+    element.properties.iter().any(|(name, value)| {
+        name == "className"
+            && matches!(
+                value,
+                PropertyValue::SpaceSeparated(classes) if classes.iter().any(|class| class == expected)
+            )
+    })
 }
 
 pub fn rewrite_media(

@@ -58,8 +58,8 @@
   "devDependencies": {
     "@amamo/oxlint-config": "1.0.0",
     "@amamo/verso": "1.0.1",
-    "@napi-rs/cli": "3.8.2",
-    "@types/node": "26.1.2",
+    "@napi-rs/cli": "3.8.4",
+    "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "lint-staged": "17.3.0",

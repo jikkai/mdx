@@ -22,6 +22,8 @@ pub struct NativeConfig {
     pub derived: NativeDerivedConfig,
     pub highlight: NativeHighlightConfig,
     pub manifests: HashMap<String, NativeManifestConfig>,
+    #[serde(default)]
+    pub math: NativeMathConfig,
     pub media: NativeMediaConfig,
     pub mdx: NativeMdxConfig,
     pub root: String,
@@ -89,6 +91,25 @@ pub struct NativeMdxConfig {
     pub hard_breaks: bool,
     pub jsx_import_source: String,
     pub provider_import_source: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeMathConfig {
+    pub enabled: bool,
+    #[serde(default)]
+    pub macros: HashMap<String, String>,
+    pub single_dollar: bool,
+}
+
+impl Default for NativeMathConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            macros: HashMap::new(),
+            single_dollar: true,
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]

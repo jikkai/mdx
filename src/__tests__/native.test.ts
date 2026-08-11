@@ -5,6 +5,8 @@ import path from 'node:path'
 
 import { test } from 'vitest'
 
+import type { IAmamoMdxConfig } from '../config.js'
+
 import { normalizeConfig } from '../config.js'
 import {
   AmamoMdxError,
@@ -14,7 +16,7 @@ import {
 } from '../native.js'
 import { createShikiRenderer } from '../shiki.js'
 
-const config = normalizeConfig({
+const sourceConfig: IAmamoMdxConfig = {
   cache: false,
   root: '/project',
   collections: {
@@ -33,7 +35,8 @@ const config = normalizeConfig({
       sensitive: ['password'],
     },
   },
-})
+}
+const config = normalizeConfig(sourceConfig)
 
 test('loads the real addon and returns only public frontmatter', () => {
   const batch = prepareNativeBatch(config, [
@@ -124,6 +127,149 @@ test('injects real Shiki HAST into the compiled module', async () => {
   } finally {
     renderer.dispose()
   }
+})
+
+test('leaves dollar-delimited text unchanged when math is disabled', () => {
+  const batch = prepareNativeBatch(config, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/plain-dollar.mdx',
+      key: 'plain-dollar',
+      source: '---\ntitle: Plain dollar\n---\nThe value is $x$.\n',
+    },
+  ])
+  const module = batch.finish([])[0]?.module ?? ''
+
+  assert.match(module, /The value is \$x\$/)
+  assert.doesNotMatch(module, /amamo-math/)
+})
+
+test('changes cache keys when math macros change', () => {
+  const input = {
+    collection: 'posts',
+    file: '/project/content/posts/cache-math.mdx',
+    key: 'cache-math',
+    source: '---\ntitle: Cache math\n---\n$\\numberSet$\n',
+  }
+  const natural = normalizeConfig({
+    ...sourceConfig,
+    highlight: false,
+    math: { macros: { '\\numberSet': '\\mathbb{N}' } },
+  })
+  const real = normalizeConfig({
+    ...sourceConfig,
+    highlight: false,
+    math: { macros: { '\\numberSet': '\\mathbb{R}' } },
+  })
+
+  const naturalKey = prepareNativeBatch(natural, [input]).finish([])[0]?.cacheKey
+  const realKey = prepareNativeBatch(real, [input]).finish([])[0]?.cacheKey
+
+  assert.notEqual(naturalKey, realKey)
+})
+
+test('renders configured math as self-contained SVG without shifting Shiki blocks', async () => {
+  const mathConfig = normalizeConfig({
+    ...sourceConfig,
+    math: { macros: { '\\RR': '\\mathbb{R}' } },
+  })
+  const batch = prepareNativeBatch(mathConfig, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/math.mdx',
+      key: 'math',
+      source:
+        '---\ntitle: Math\n---\nThe set $\\RR$ is infinite.\n\n$$\n\\sum_{i=1}^n i\n$$\n\n```ts\nconst n = 1\n```\n',
+    },
+  ])
+  assert.equal(batch.codeBlocks.length, 1)
+  assert.equal(batch.codeBlocks[0]?.lang, 'ts')
+  const renderer = await createShikiRenderer(mathConfig.highlight)
+
+  try {
+    const module = batch.finish(await renderer.highlight(batch.codeBlocks))[0]?.module ?? ''
+    assert.match(module, /amamo-math-inline/)
+    assert.match(module, /amamo-math-display/)
+    assert.match(module, /currentColor/)
+    assert.match(module, /verticalAlign/)
+    assert.match(module, /role: "math"/)
+    assert.match(module, /"aria-label": "\\\\RR"/)
+    assert.match(module, /language-ts/)
+    assert.doesNotMatch(module, /language-math/)
+    assert.doesNotMatch(module, /dangerouslySetInnerHTML|katex|ratex|<text/)
+  } finally {
+    renderer.dispose()
+  }
+})
+
+test('reports invalid math through the native diagnostic interface', () => {
+  const mathConfig = normalizeConfig({ ...sourceConfig, math: {} })
+
+  assert.throws(
+    () =>
+      prepareNativeBatch(mathConfig, [
+        {
+          collection: 'posts',
+          file: '/project/content/posts/bad-math.mdx',
+          key: 'bad-math',
+          source: '---\ntitle: Bad math\n---\n$\\frac{$\n',
+        },
+      ]),
+    (error: unknown) => {
+      assert.ok(error instanceof AmamoMdxError)
+      assert.equal(error.diagnostics[0]?.code, 'AMAMO_MATH_PARSE')
+      assert.equal(error.diagnostics[0]?.file, '/project/content/posts/bad-math.mdx')
+      return true
+    },
+  )
+})
+
+test('keeps fenced math code separate from rendered formulas', async () => {
+  const mathConfig = normalizeConfig({
+    ...sourceConfig,
+    highlight: {
+      provider: 'shiki',
+      themes: { dark: 'vitesse-dark', light: 'vitesse-light' },
+      unknownLanguage: 'plain',
+    },
+    math: {},
+  })
+  const batch = prepareNativeBatch(mathConfig, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/math-code.mdx',
+      key: 'math-code',
+      source: '---\ntitle: Math code\n---\n```math\nx + y\n```\n',
+    },
+  ])
+  assert.equal(batch.codeBlocks.length, 1)
+  assert.equal(batch.codeBlocks[0]?.lang, 'math')
+  const renderer = await createShikiRenderer(mathConfig.highlight)
+
+  try {
+    const module = batch.finish(await renderer.highlight(batch.codeBlocks))[0]?.module ?? ''
+    assert.match(module, /language-math/)
+    assert.doesNotMatch(module, /amamo-math-(?:inline|display)/)
+  } finally {
+    renderer.dispose()
+  }
+})
+
+test('can disable single-dollar inline math without disabling display math', () => {
+  const mathConfig = normalizeConfig({ ...sourceConfig, math: { singleDollar: false } })
+  const batch = prepareNativeBatch(mathConfig, [
+    {
+      collection: 'posts',
+      file: '/project/content/posts/currency.mdx',
+      key: 'currency',
+      source: '---\ntitle: Currency\n---\nCosts $5 today.\n\n$$\nx + 1\n$$\n',
+    },
+  ])
+  const module = batch.finish([])[0]?.module ?? ''
+
+  assert.match(module, /Costs \$5 today/)
+  assert.match(module, /amamo-math-display/)
+  assert.doesNotMatch(module, /amamo-math-inline/)
 })
 
 test('persists safe records and recovers a corrupt cache entry', async () => {

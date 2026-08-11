@@ -1,5 +1,5 @@
 ---
-description: Exact defaults and behavior for collections, MDX, highlighting, media, derived fields, manifests, cache, and generated output.
+description: Exact defaults and behavior for collections, MDX, math, highlighting, media, derived fields, manifests, cache, and generated output.
 ---
 
 # Configuration
@@ -30,6 +30,7 @@ At least one collection is required.
 | `root`               | `process.cwd()`   | Base for relative configuration paths.                   |
 | `collections`        | required          | Content directories, schemas, locales, and slugs.        |
 | `mdx`                | see below         | MDX parser and JSX runtime options.                      |
+| `math`               | disabled          | Build-time math rendering. Use `{}` to enable.           |
 | `highlight`          | Shiki enabled     | Syntax highlighting policy. Use `false` to disable.      |
 | `media`              | rewriting enabled | Markdown media import policy. Use `false` to disable.    |
 | `derived`            | all disabled      | Reading time and last-modified metadata.                 |
@@ -113,6 +114,45 @@ mdx: {
 
 Authored ESM and MDX JSX remain part of the compiled module. `providerImportSource` controls MDX
 component-provider wiring; it is not a switch for preserving or stripping JSX.
+
+## Math
+
+```ts
+math: {
+  singleDollar: true,
+  macros: {
+    '\\RR': '\\mathbb{R}',
+  },
+}
+```
+
+Math syntax is opt-in. Set `math: {}` to render inline `$x$` and display `$$` expressions, or
+`math: false` to keep dollar signs as ordinary text. `singleDollar: false` disables the `$x$`
+inline form, which is useful for prose containing currency. With the default enabled, write a
+literal currency sign as `\$`.
+
+`macros` maps one TeX control sequence to a fixed expansion. Each expansion is limited to 1 KiB,
+and names plus expansions are limited to 16 KiB in total. Parameter placeholders and dynamic
+definition commands such as `\\def` and `\\newcommand` are rejected. The map is copied and applied
+independently to each expression, so definitions cannot leak between documents.
+
+RaTeX parses, lays out, and renders each expression inside the Rust compiler. The generated module
+contains self-contained SVG output with no browser math runtime, stylesheet, webfont, raw HTML, or
+`dangerouslySetInnerHTML`. Invalid TeX reports `AMAMO_MATH_PARSE`; unsafe, external, or non-embedded
+SVG output reports `AMAMO_MATH_RENDER`. A glyph that cannot be embedded fails the build instead of
+falling back to an external font. Non-KaTeX Unicode glyphs can use an installed system font, so
+their exact outlines may differ between build machines. Only publish those glyphs when the build
+machine's fallback-font license permits embedding and redistribution.
+
+Each expression is limited to 64 KiB of TeX, 100,000 expanded tokens, an 8 MiB or 100,000-node
+parsed AST, 100,000 expanded array cells in total, 10,000 display items, 10,000 em in either
+dimension, a 16 MiB SVG, and 100,000 SVG nodes. Parse and structural limit failures report
+`AMAMO_MATH_PARSE`; layout or SVG limit failures report `AMAMO_MATH_RENDER`.
+
+Inline SVG uses RaTeX's depth for baseline alignment and inherits `currentColor`; explicit TeX
+colors remain explicit. The wrapper exposes `role="math"` and the source expression as an accessible
+label. RaTeX does not currently emit MathML, so formula text is not selectable and assistive
+technology receives the TeX label rather than a MathML tree.
 
 ## Highlighting
 

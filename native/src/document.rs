@@ -10,9 +10,11 @@ use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
 use crate::Diagnostic;
 use crate::config::{
-    NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig, apply_schema_defaults_and_validate,
+    NativeCollectionConfig, NativeMathConfig, NativeMdxConfig, NativeMediaConfig,
+    apply_schema_defaults_and_validate,
 };
 use crate::hast::{remove_table_line_breaks, rewrite_media};
+use crate::math::replace_math;
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -89,11 +91,17 @@ pub fn prepare_mdx(
     file: &str,
     body: &str,
     config: &NativeMdxConfig,
+    math: &NativeMathConfig,
     highlight: bool,
     root: &Path,
     media: &NativeMediaConfig,
 ) -> Result<PreparedMdx, Vec<Diagnostic>> {
-    let options = mdx_options(file, config);
+    let mut options = mdx_options(file, config);
+    if math.enabled {
+        options.parse.constructs.math_flow = true;
+        options.parse.constructs.math_text = true;
+        options.parse.math_text_single_dollar = math.single_dollar;
+    }
     let mut mdast = mdxjs::mdast_util_from_mdx(body, &options)
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
     let reading_words = reading_units(&mdast);
@@ -105,6 +113,7 @@ pub fn prepare_mdx(
         apply_hard_breaks(&mut mdast);
     }
     let mut tree = mdxjs::mdast_util_to_hast(&mdast);
+    replace_math(&mut tree, file, math)?;
     remove_table_line_breaks(&mut tree);
     let media = rewrite_media(&mut tree, root, Path::new(file), media)?;
 
@@ -378,7 +387,9 @@ mod tests {
     use mdxjs::hast::Node;
     use serde_json::json;
 
-    use crate::config::{MediaMissing, NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig};
+    use crate::config::{
+        MediaMissing, NativeCollectionConfig, NativeMathConfig, NativeMdxConfig, NativeMediaConfig,
+    };
 
     use super::{finish_mdx, parse_frontmatter, prepare_mdx};
 
@@ -440,6 +451,7 @@ mod tests {
             "/project/hello.mdx",
             source,
             &options,
+            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &NativeMediaConfig::default(),
@@ -478,6 +490,7 @@ mod tests {
             "/project/table.mdx",
             source,
             &options,
+            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &NativeMediaConfig::default(),
@@ -501,6 +514,7 @@ mod tests {
             "/project/hello.mdx",
             source,
             &options,
+            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &NativeMediaConfig::default(),
@@ -540,6 +554,7 @@ mod tests {
             file.to_str().unwrap(),
             source,
             &options,
+            &NativeMathConfig::default(),
             false,
             &root,
             &media,
@@ -585,6 +600,7 @@ mod tests {
             "/project/content/post.mdx",
             "![](../../outside.png)",
             &options,
+            &NativeMathConfig::default(),
             false,
             std::path::Path::new("/project"),
             &media,

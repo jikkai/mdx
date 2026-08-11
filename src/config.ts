@@ -1,3 +1,4 @@
+import { Buffer } from 'node:buffer'
 import { existsSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 
@@ -40,6 +41,11 @@ export interface IMdxConfig {
   hardBreaks?: boolean
   jsxImportSource?: string
   providerImportSource?: string
+}
+
+export interface IMathConfig {
+  macros?: Record<string, string>
+  singleDollar?: boolean
 }
 
 export interface IHighlightConfig {
@@ -86,6 +92,7 @@ export interface IAmamoMdxConfig {
   generatedDirectory?: string
   highlight?: false | IHighlightConfig
   manifests?: Record<string, IManifestConfig>
+  math?: false | IMathConfig
   mdx?: IMdxConfig
   media?: false | IMediaConfig
   root?: string
@@ -136,6 +143,11 @@ export interface INormalizedConfig {
   generatedDirectory: string
   highlight: INormalizedHighlightConfig
   manifests: Record<string, INormalizedManifestConfig>
+  math: {
+    enabled: boolean
+    macros: Record<string, string>
+    singleDollar: boolean
+  }
   mdx: Required<IMdxConfig>
   media: INormalizedMediaConfig
   root: string
@@ -150,6 +162,9 @@ const DEFAULT_MEDIA_ATTRIBUTES: Record<string, string[]> = {
   track: ['src'],
   video: ['src', 'poster'],
 }
+const MATH_MACRO_NAME = /^\\(?:[A-Za-z@]+|[^\s])$/u
+const MAX_MATH_MACRO_BYTES = 1024
+const MAX_MATH_MACROS_BYTES = 16 * 1024
 
 function notSerializable(location: string, reason: string): never {
   throw new TypeError(`AMAMO_CONFIG_NOT_SERIALIZABLE: ${location} ${reason}`)
@@ -250,7 +265,32 @@ export function normalizeConfig(config: IAmamoMdxConfig): INormalizedConfig {
   )
 
   const highlight = config.highlight === false ? undefined : config.highlight
+  const math = config.math === false ? undefined : config.math
   const media = config.media === false ? undefined : config.media
+
+  let macroBytes = 0
+  for (const [name, expansion] of Object.entries(math?.macros ?? {})) {
+    if (!name.startsWith('\\')) {
+      throw new TypeError(`AMAMO_CONFIG_INVALID: math.macros.${name} must start with a backslash`)
+    }
+    if (!MATH_MACRO_NAME.test(name)) {
+      throw new TypeError(
+        `AMAMO_CONFIG_INVALID: math.macros.${name} must be one TeX control sequence`,
+      )
+    }
+    const expansionBytes = Buffer.byteLength(expansion)
+    if (expansionBytes > MAX_MATH_MACRO_BYTES) {
+      throw new TypeError(
+        `AMAMO_CONFIG_INVALID: math.macros.${name} exceeds the ${MAX_MATH_MACRO_BYTES}-byte limit`,
+      )
+    }
+    macroBytes += Buffer.byteLength(name) + expansionBytes
+    if (macroBytes > MAX_MATH_MACROS_BYTES) {
+      throw new TypeError(
+        `AMAMO_CONFIG_INVALID: math.macros exceeds the ${MAX_MATH_MACROS_BYTES}-byte total limit`,
+      )
+    }
+  }
 
   return {
     cache: {
@@ -281,6 +321,11 @@ export function normalizeConfig(config: IAmamoMdxConfig): INormalizedConfig {
       unknownLanguage: highlight?.unknownLanguage ?? 'error',
     },
     manifests,
+    math: {
+      enabled: config.math !== undefined && config.math !== false,
+      macros: { ...math?.macros },
+      singleDollar: math?.singleDollar ?? true,
+    },
     mdx: {
       gfm: config.mdx?.gfm ?? true,
       hardBreaks: config.mdx?.hardBreaks ?? false,

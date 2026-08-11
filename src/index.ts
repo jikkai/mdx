@@ -6,6 +6,7 @@ export type {
   IHighlightConfig,
   ILocaleConfig,
   IManifestConfig,
+  IMathConfig,
   IMdxConfig,
   IMediaConfig,
   INormalizedConfig,
