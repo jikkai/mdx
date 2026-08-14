@@ -140,7 +140,7 @@ export interface INormalizedManifestConfig extends Omit<IManifestConfig, 'collec
   output: string
 }
 
-export interface INormalizedConfig {
+export interface IAmamoMDXConfig {
   cache: {
     directory: string
     enabled: boolean
@@ -250,7 +250,7 @@ export function defineConfig<T extends IAmamoMdxConfig>(config: T): T {
   return config
 }
 
-export function normalizeConfig(config: IAmamoMdxConfig): INormalizedConfig {
+export function normalizeConfig(config: IAmamoMdxConfig): IAmamoMDXConfig {
   assertPlainData(config, 'config', new WeakSet())
   if (Object.hasOwn(config, 'math')) {
     throw new TypeError('AMAMO_CONFIG_INVALID: math moved to mdx.math')

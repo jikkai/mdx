@@ -62,6 +62,8 @@ The following table is derived from the root `package.json` scripts.
 | `pnpm run test:rust`      | Run the Rust unit tests.                                                          |
 | `pnpm run typecheck`      | Type-check TypeScript without emitting files.                                     |
 | `pnpm run check:docs`     | Type-check and build the documentation site.                                      |
+| `pnpm run check:npm`      | Type-check, rebuild, and run the Vitest suite.                                    |
+| `pnpm run check:rust`     | Run Clippy and the Rust unit tests.                                               |
 | `pnpm run check`          | Run formatting, lint, Clippy, Rust tests, type-checking, Vitest, and docs checks. |
 | `pnpm run prepublishOnly` | Stage npm native packages with napi-rs before publication.                        |
 | `pnpm run release`        | Run the maintainer-owned Verso release workflow.                                  |

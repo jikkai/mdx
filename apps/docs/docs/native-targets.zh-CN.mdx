@@ -1,5 +1,5 @@
 ---
-description: 受支持的平台包、原生加载错误、Node.js 策略、本地构建和发布验证。
+description: 受支持的平台包、原生加载错误和运行时要求。
 ---
 
 # 原生目标
@@ -21,10 +21,8 @@ description: 受支持的平台包、原生加载错误、Node.js 策略、本�
 
 ## 绑定何时加载
 
-`createCompiler()` 会归一化配置，也可能初始化 Shiki，但不会加载 Rust。第一个 `build()` 或
-`transform()` 进入 `prepareNativeBatch` 时，才会 require `native.cjs` 和匹配的二进制。
-
-Loader 先尝试本地 `index.<platform>.node`，再尝试对应平台包。平台包必须与根包版本完全相同。
+`createCompiler()` 会归一化配置，也可能初始化 Shiki，但不会加载 Rust。匹配的原生二进制会在
+第一次调用 `build()` 或 `transform()` 时延迟加载。平台包必须与根包版本完全相同。
 
 | 顶层错误                   | 含义                                        |
 | -------------------------- | ------------------------------------------- |
@@ -37,13 +35,9 @@ aggregate cause 中，不是顶层 loader 错误。
 如果依赖是在另一台机器上安装的，请在当前目标重新安装。可以复用包管理器缓存，但不要复制
 `node_modules`。
 
-## Node.js 策略
+## Node.js 要求
 
-根包和平台包声明 Node.js `>=20.19`。仓库 CI 目前在 Node.js 24 上运行完整质量门，再分别使用
-Turbopack 和 Webpack 构建 Next fixture。应把 20.19 视为支持的引擎下限，而不是每个中间
-版本都在 CI 执行过的保证。
-
-原生 crate 启用了 N-API 8。
+根包和平台包要求使用 Node.js 20.19 或更新版本。
 
 ## Shiki 引擎是独立选择
 
@@ -59,25 +53,3 @@ highlight: {
 
 两个值都使用 Shiki 官方引擎实现。切换前请测试实际语言和主题集合；本包不保证两个引擎输出
 逐字节一致。
-
-## 本地构建
-
-仓库在 `rust-toolchain.toml` 固定了 Rust 版本。在受支持的开发机器上运行：
-
-```sh
-pnpm install
-pnpm run build:native
-node scripts/check-artifacts.mjs --local native.cjs
-```
-
-`build:native` 构建当前平台绑定并生成 `native.d.ts`。`pnpm test` 会先重建原生和 TypeScript
-产物，再运行集成测试。
-
-添加 target 不只是传一个 `--target`：还要更新 napi target 列表、原生 loader、平台包、
-artifact 校验器、release matrix 和目标环境的加载验证。
-
-## 发布验证
-
-Release workflow 会在矩阵 runner（musl 使用 Alpine）上构建并加载测试每个原生 artifact。
-随后 publish job 会运行完整质量门、校验所有下载的平台包、dry-run 每个 npm 包，并先发布
-平台包，再发布根包。

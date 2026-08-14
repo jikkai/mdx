@@ -48,24 +48,26 @@
     "test": "pnpm run build && vitest run src/__tests__",
     "test:rust": "cargo test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "check": "pnpm run format:check && pnpm run lint && cargo clippy --all-targets -- -D warnings && cargo test && pnpm run typecheck && pnpm run test && pnpm run check:docs",
+    "check": "pnpm run format:check && pnpm run lint && pnpm run check:rust && pnpm run check:npm && pnpm run check:docs",
     "check:docs": "pnpm --filter @amamo/mdx-docs types:check && pnpm --filter @amamo/mdx-docs build",
+    "check:npm": "pnpm run typecheck && pnpm run test",
+    "check:rust": "cargo clippy --all-targets -- -D warnings && pnpm run test:rust",
     "release": "verso"
   },
   "dependencies": {
-    "shiki": "4.4.2"
+    "shiki": "4.4.3"
   },
   "devDependencies": {
-    "@amamo/oxlint-config": "1.0.0",
-    "@amamo/verso": "1.0.1",
-    "@napi-rs/cli": "3.8.4",
+    "@amamo/oxlint-config": "1.1.0",
+    "@amamo/verso": "1.1.0",
+    "@napi-rs/cli": "3.8.6",
     "@types/node": "26.2.0",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "lint-staged": "17.3.0",
     "next": "16.3.0",
-    "oxfmt": "0.62.0",
-    "oxlint": "1.77.0",
+    "oxfmt": "0.63.0",
+    "oxlint": "1.78.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "simple-git-hooks": "2.13.1",

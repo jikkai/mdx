@@ -1,4 +1,5 @@
 export type {
+  IAmamoMDXConfig,
   IAmamoMdxConfig,
   ICacheConfig,
   ICollectionConfig,
@@ -10,7 +11,6 @@ export type {
   IMdxConfig,
   IMdxExtensionsConfig,
   IMediaConfig,
-  INormalizedConfig,
   JsonValue,
   ManifestField,
 } from './config.js'

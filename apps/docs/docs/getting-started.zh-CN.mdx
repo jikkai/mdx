@@ -9,16 +9,14 @@ description: 安装 @amamo/mdx，定义一个集合，编译一篇文档并使�
 
 ## 要求
 
-- **Node.js 20.19 或更新版本。** 这是包声明的最低引擎版本；项目 CI 目前使用 Node.js 24。
+- **Node.js 20.19 或更新版本。** 这是包声明的最低引擎版本。
 - **受支持的原生目标。** 绑定没有 JavaScript 或 WASI 回退，详见[原生目标](/zh-CN/native-targets/)。
 - **宿主应用使用 React 19。** 默认 `jsxImportSource` 是 `react`。
 - **MDX 作者可信。** 编译后的 MDX 可以在宿主应用中执行 JavaScript。
 
 ## 安装
 
-```sh
-pnpm add @amamo/mdx
-```
+<InstallTabs packageName="@amamo/mdx" />
 
 发布的根包会在安装时选择匹配的平台包。不要在不同操作系统、CPU 架构或 Linux libc 之间
 复制 `node_modules`。

@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
 
-import type { INormalizedConfig, JsonValue } from './config.js'
+import type { IAmamoMDXConfig, JsonValue } from './config.js'
 
 export interface ISourcePoint {
   column: number
@@ -99,14 +99,14 @@ const require = createRequire(import.meta.url)
 const packageVersion = (require('../package.json') as { version: string }).version
 const shikiVersion = (require('shiki/package.json') as { version: string }).version
 
-function nativeConfigJson(config: INormalizedConfig): string {
+function nativeConfigJson(config: IAmamoMDXConfig): string {
   return JSON.stringify({
     ...config,
     _runtime: { packageVersion, shikiVersion },
   })
 }
 
-export function configurationFingerprint(config: INormalizedConfig): string {
+export function configurationFingerprint(config: IAmamoMDXConfig): string {
   return createHash('sha256').update(nativeConfigJson(config)).digest('hex')
 }
 
@@ -124,7 +124,7 @@ function mapNativeError(error: unknown): never {
 }
 
 export function prepareNativeBatch(
-  config: INormalizedConfig,
+  config: IAmamoMDXConfig,
   inputs: INativeDocumentInput[],
 ): IPreparedNativeBatch {
   try {
@@ -153,7 +153,7 @@ export function pruneNativeCache(cacheDirectory: string, keepKeys: string[]): nu
 }
 
 export function renderNativeManifests(
-  config: INormalizedConfig,
+  config: IAmamoMDXConfig,
   records: IDocumentRecord[],
 ): IRenderedManifest[] {
   try {

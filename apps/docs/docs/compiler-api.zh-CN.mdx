@@ -4,8 +4,8 @@ description: 构建完整内容集、应用增量更新、检查结果并释放�
 
 # 编译器 API
 
-当你自己的脚本或构建系统需要管理生命周期时，使用 `createCompiler`。Vite 和 Next 通过内部
-适配器接口使用同一套实现，但每个创建出的实例都有自己的记录、队列、高亮器和可选 watcher。
+当你自己的脚本或构建系统需要管理生命周期时，使用 `createCompiler`。Vite 和 Next 共用相同
+的编译器行为，但每个创建出的实例都有自己的记录、队列和高亮器。
 
 ## 创建并关闭编译器
 
@@ -111,8 +111,8 @@ const outputsWritten = await compiler.remove('/absolute/path/content/posts/delet
 await compiler.dispose()
 ```
 
-释放操作会关闭适配器启动的内部 watcher，并销毁 Shiki。它是幂等的；之后再调用 build、
-transform 或 remove 会以 `AMAMO_COMPILER_DISPOSED` 拒绝。
+释放操作会清理编译器资源并销毁 Shiki。它是幂等的；之后再调用 build、transform 或 remove
+会以 `AMAMO_COMPILER_DISPOSED` 拒绝。
 
 ## 错误与诊断
 
@@ -140,9 +140,9 @@ interface IDiagnostic {
 }
 ```
 
-这个类型为 `range` 和 `hint` 预留了位置，但当前原生构造器不会填充它们。batch 会在第一篇失败
-文档或第一个失败阶段停止，而不会聚合全部失败。Schema 消息可能引用提交的 frontmatter 值，
-包括后来标记为 sensitive 的字段。
+这个类型为 `range` 和 `hint` 预留了位置，但目前不会填充它们。batch 会在第一篇失败文档或
+第一个失败阶段停止，而不会聚合全部失败。Schema 消息可能引用提交的 frontmatter 值，包括
+后来标记为 sensitive 的字段。
 
 ## 共享生成文件
 

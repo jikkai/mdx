@@ -6,7 +6,7 @@ import { mkdir, open, readFile, readdir, rename, rm, stat } from 'node:fs/promis
 import path from 'node:path'
 import { promisify } from 'node:util'
 
-import type { IAmamoMdxConfig, INormalizedCollectionConfig, INormalizedConfig } from './config.js'
+import type { IAmamoMDXConfig, IAmamoMdxConfig, INormalizedCollectionConfig } from './config.js'
 import { normalizeConfig } from './config.js'
 import type { IDocumentRecord, INativeDocumentInput } from './native.js'
 import {
@@ -74,7 +74,7 @@ class Compiler implements IAdapterCompiler {
   private watcherError: Error | undefined
 
   public constructor(
-    private readonly config: INormalizedConfig,
+    private readonly config: IAmamoMDXConfig,
     private readonly shiki: IShikiRenderer | undefined,
   ) {
     this.generatedCollectionModule = path.join(config.generatedDirectory, 'collections.mjs')
@@ -409,7 +409,7 @@ async function walkFiles(directory: string): Promise<string[]> {
   return files
 }
 
-function generateCollectionModule(config: INormalizedConfig, records: IDocumentRecord[]): string {
+function generateCollectionModule(config: IAmamoMDXConfig, records: IDocumentRecord[]): string {
   const collections = Object.keys(config.collections).toSorted()
   const lines = ['export const collections = {']
   for (const collection of collections) {

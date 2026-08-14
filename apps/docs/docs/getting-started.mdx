@@ -9,8 +9,7 @@ collection registry, and companion declaration file.
 
 ## Requirements
 
-- **Node.js 20.19 or newer.** This is the package's declared engine floor; project CI currently runs
-  Node.js 24.
+- **Node.js 20.19 or newer.** This is the package's declared engine floor.
 - **A supported native target.** The binding has no JavaScript or WASI fallback. See [Native
   targets](/native-targets/).
 - **React 19 in the host application.** The default `jsxImportSource` is `react`.
@@ -18,9 +17,7 @@ collection registry, and companion declaration file.
 
 ## Install
 
-```sh
-pnpm add @amamo/mdx
-```
+<InstallTabs packageName="@amamo/mdx" />
 
 The published root package selects a matching platform package during installation. Do not copy a
 `node_modules` directory between operating systems, CPU architectures, or Linux libc variants.

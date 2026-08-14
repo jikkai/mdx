@@ -5,7 +5,7 @@ description: 集合、MDX、数学公式、高亮、媒体、派生字段、mani
 # 配置
 
 `defineConfig` 会原样返回参数。`normalizeConfig` 才是运行时边界：它拒绝非纯数据、应用默认值、
-解析路径，并返回所有编译器和适配器共用的 `INormalizedConfig`。
+解析路径，并返回所有编译器和适配器共用的 `IAmamoMDXConfig`。
 
 ```ts
 import { defineConfig } from '@amamo/mdx'

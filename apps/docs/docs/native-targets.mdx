@@ -1,5 +1,5 @@
 ---
-description: Supported platform packages, native loading errors, Node.js policy, local builds, and release verification.
+description: Supported platform packages, native loading errors, and runtime requirements.
 ---
 
 # Native targets
@@ -21,12 +21,9 @@ architecture, and Linux libc. No JavaScript or WASI implementation is bundled.
 
 ## When the binding loads
 
-`createCompiler()` normalizes the config and may initialize Shiki without loading Rust. The first
-`build()` or `transform()` enters `prepareNativeBatch`, which then requires `native.cjs` and the
-matching binary.
-
-The loader tries a local `index.<platform>.node` first, then the corresponding platform package. A
-platform package must have the exact same version as the root package.
+`createCompiler()` normalizes the config and may initialize Shiki without loading Rust. The matching
+native binary loads lazily on the first `build()` or `transform()`. Its platform package must have
+the exact same version as the root package.
 
 | Top-level error            | Meaning                                                             |
 | -------------------------- | ------------------------------------------------------------------- |
@@ -39,13 +36,9 @@ A package version mismatch appears as `AMAMO_NATIVE_VERSION_MISMATCH` inside the
 If installation succeeded on another machine, reinstall dependencies on the current target. Package
 manager caches are safe; a copied `node_modules` directory is not.
 
-## Node.js policy
+## Node.js requirement
 
-The root and platform packages declare Node.js `>=20.19`. Repository CI currently runs the complete
-quality gate on Node.js 24, then builds the Next fixture with Turbopack and Webpack. Treat 20.19 as
-the supported engine floor, not a claim that every intervening release is exercised in CI.
-
-The native crate enables N-API 8.
+The root and platform packages require Node.js 20.19 or newer.
 
 ## Shiki engines are separate
 
@@ -61,25 +54,3 @@ highlight: {
 
 Both values use Shiki's official engine implementations. Test your actual language and theme set
 before switching; this package does not promise byte-identical output between engines.
-
-## Build locally
-
-The repository pins Rust in `rust-toolchain.toml`. On a supported development machine:
-
-```sh
-pnpm install
-pnpm run build:native
-node scripts/check-artifacts.mjs --local native.cjs
-```
-
-`build:native` builds the current platform binding and generates `native.d.ts`. `pnpm test` rebuilds
-both native and TypeScript output before running the integration suite.
-
-Adding a target requires more than passing `--target`: update the napi target list, native loader,
-platform package, artifact validator, release matrix, and target-native load verification.
-
-## Release verification
-
-The release workflow builds and load-tests each native artifact on its matrix runner (or Alpine for
-musl). The publish job then runs the full quality gate, validates all downloaded package artifacts,
-dry-runs every npm package, and publishes platform packages before the root package.

@@ -4,9 +4,9 @@ description: Build a complete content set, apply incremental updates, inspect re
 
 # Compiler API
 
-Use `createCompiler` when your own script or build system should own the lifecycle. Vite and Next use
-the same implementation through an internal adapter interface, but each created instance keeps its
-own records, queue, highlighter, and optional watcher.
+Use `createCompiler` when your own script or build system should own the lifecycle. Vite and Next
+share the same compiler behavior, but each created instance keeps its own records, queue, and
+highlighter.
 
 ## Create and close a compiler
 
@@ -114,8 +114,8 @@ and returns the number of changed output files. An unknown path is a no-op retur
 await compiler.dispose()
 ```
 
-Disposal closes the internal watcher when one was started by an adapter and disposes Shiki. It is
-idempotent. Any later build, transform, or remove call rejects with `AMAMO_COMPILER_DISPOSED`.
+Disposal releases compiler resources and Shiki. It is idempotent. Any later build, transform, or
+remove call rejects with `AMAMO_COMPILER_DISPOSED`.
 
 ## Errors and diagnostics
 
@@ -143,9 +143,9 @@ interface IDiagnostic {
 }
 ```
 
-The shape reserves `range` and `hint`, but current native constructors do not populate them. A batch
-stops at the first failing document or stage rather than aggregating every failure. Schema messages
-may quote submitted frontmatter values, including fields later marked sensitive.
+The shape reserves `range` and `hint`, but they are currently omitted. A batch stops at the first
+failing document or stage rather than aggregating every failure. Schema messages may quote submitted
+frontmatter values, including fields later marked sensitive.
 
 ## Shared generated files
 
