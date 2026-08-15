@@ -39,24 +39,20 @@ title: 你好
 
 ## 定义集合
 
-配置必须是可序列化的纯数据。`defineConfig` 是向支持 TypeScript 的工具暴露配置类型的恒等
-辅助函数；创建编译器或适配器时才会执行校验并应用默认值。
+集合 schema 使用包内与 Zod 兼容的 `z.object`；其它配置值必须是可序列化的纯数据。
+`defineConfig` 是向支持 TypeScript 的工具暴露配置类型的恒等辅助函数；创建编译器或适配器时
+才会转换 schema、执行校验并应用默认值。
 
 ```js
 // amamo.config.mjs
-import { defineConfig } from '@amamo/mdx'
+import { defineConfig, z } from '@amamo/mdx'
 
 export default defineConfig({
   root: import.meta.dirname,
   collections: {
     posts: {
       directory: 'content/posts',
-      schema: {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        properties: { title: { type: 'string' } },
-        required: ['title'],
-      },
+      schema: z.object({ title: z.string() }),
     },
   },
   manifests: {
@@ -181,5 +177,4 @@ const module = await hello?.load()
 
 把 `.amamo-mdx/` 加入宿主仓库的忽略文件。字节未变化的共享文件和 manifest 不会被重写。
 
-接下来阅读[配置参考](/zh-CN/configuration/)了解全部默认值，或在 frontmatter 中存储受保护数据
-前阅读[安全模型](/zh-CN/security/)。
+接下来阅读[配置参考](/zh-CN/configuration/)，了解全部可用选项及其默认值。

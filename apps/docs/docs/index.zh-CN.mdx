@@ -4,30 +4,29 @@ description: 通过一条原生编译流水线，将可信 MDX 编译成适配�
 
 # 一个原生 MDX 内容编译器
 
-给 `@amamo/mdx` 一个 MDX 目录和一份 JSON Schema。一次构建会校验 frontmatter、按配置的 JSX
-runtime（默认 React）编译每篇文档、使用 Shiki 高亮围栏代码块，并写出集合注册表、配套声明和
-你配置的 manifest。
+给 `@amamo/mdx` 一个 MDX 目录和一份 Zod object schema。一次构建会先把 schema 转成 JSON
+Schema，再校验 frontmatter、按配置的 JSX runtime（默认 React）编译每篇文档、使用 Shiki
+高亮围栏代码块，并写出集合注册表、配套声明和你配置的 manifest。
 
 <InstallTabs packageName="@amamo/mdx" />
 
 ## 选择入口
 
-| 我想……                            | 从这里开始                         |
-| --------------------------------- | ---------------------------------- |
-| 在 Vite 应用中编译内容            | [Vite 8](/zh-CN/vite/)             |
-| 在 Next 应用中导入 MDX            | [Next 16](/zh-CN/next/)            |
-| 用自己的脚本驱动构建              | [编译器 API](/zh-CN/compiler-api/) |
-| 查看所有配置默认值                | [配置参考](/zh-CN/configuration/)  |
-| 处理私密 frontmatter 或不可信输入 | [安全模型](/zh-CN/security/)       |
+| 我想……                 | 从这里开始                         |
+| ---------------------- | ---------------------------------- |
+| 在 Vite 应用中编译内容 | [Vite 8](/zh-CN/vite/)             |
+| 在 Next 应用中导入 MDX | [Next 16](/zh-CN/next/)            |
+| 用自己的脚本驱动构建   | [编译器 API](/zh-CN/compiler-api/) |
+| 查看所有配置默认值     | [配置参考](/zh-CN/configuration/)  |
 
 ## 一篇文档如何通过流水线
 
 ```text
-MDX 源码 + 可序列化配置
-  -> TypeScript：发现文件并串行化操作
+MDX 源码 + 配置
+  -> TypeScript：Zod 转 JSON Schema、发现文件、串行化操作
   -> Rust：YAML、JSON Schema、MDX 树、媒体、派生字段
   -> JavaScript：Shiki 官方主题、语法和引擎
-  -> Rust：高亮模块、安全元数据、manifest 投影、缓存记录
+  -> Rust：高亮模块、已校验元数据、manifest 投影、缓存记录
   -> TypeScript：collections.mjs、collections.d.ts、index.json、manifest
 ```
 

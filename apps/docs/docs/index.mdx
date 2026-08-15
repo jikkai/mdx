@@ -4,30 +4,30 @@ description: Compile trusted MDX into JavaScript modules for a configurable JSX 
 
 # A native MDX content compiler
 
-Give `@amamo/mdx` a directory of MDX files and a JSON Schema. A build validates the frontmatter,
-compiles each document for the configured JSX runtime (React by default), highlights fenced code
-with Shiki, and writes a collection registry, companion declaration, and configured manifests.
+Give `@amamo/mdx` a directory of MDX files and a Zod object schema. A build converts the schema to
+JSON Schema, validates the frontmatter, compiles each document for the configured JSX runtime (React
+by default), highlights fenced code with Shiki, and writes a collection registry, companion
+declaration, and configured manifests.
 
 <InstallTabs packageName="@amamo/mdx" />
 
 ## Choose a path
 
-| I want to...                                  | Start here                       |
-| --------------------------------------------- | -------------------------------- |
-| Compile content in a Vite app                 | [Vite 8](/vite/)                 |
-| Import MDX in a Next app                      | [Next 16](/next/)                |
-| Drive builds from my own script               | [Compiler API](/compiler-api/)   |
-| See every config default                      | [Configuration](/configuration/) |
-| Handle private frontmatter or untrusted input | [Security model](/security/)     |
+| I want to...                    | Start here                       |
+| ------------------------------- | -------------------------------- |
+| Compile content in a Vite app   | [Vite 8](/vite/)                 |
+| Import MDX in a Next app        | [Next 16](/next/)                |
+| Drive builds from my own script | [Compiler API](/compiler-api/)   |
+| See every config default        | [Configuration](/configuration/) |
 
 ## One document through the pipeline
 
 ```text
-MDX source + serializable config
-  -> TypeScript discovery and operation queue
+MDX source + config
+  -> TypeScript: Zod to JSON Schema, discovery, operation queue
   -> Rust: YAML, JSON Schema, MDX tree, media, derived fields
   -> JavaScript: official Shiki themes, grammars, and engine
-  -> Rust: highlighted module, safe metadata, manifest projections, cache record
+  -> Rust: highlighted module, validated metadata, manifest projections, cache record
   -> TypeScript: collections.mjs, collections.d.ts, index.json, manifests
 ```
 

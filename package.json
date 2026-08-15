@@ -55,7 +55,8 @@
     "release": "verso"
   },
   "dependencies": {
-    "shiki": "4.4.3"
+    "shiki": "4.4.3",
+    "zod": "4.4.3"
   },
   "devDependencies": {
     "@amamo/oxlint-config": "1.1.0",
@@ -65,7 +66,7 @@
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.4",
     "lint-staged": "17.3.0",
-    "next": "16.3.0",
+    "next": "16.3.1",
     "oxfmt": "0.63.0",
     "oxlint": "1.78.0",
     "react": "19.2.8",

@@ -118,7 +118,7 @@ await compiler.dispose()
 
 不同边界的失败形式不同：
 
-- 非法纯数据配置会抛出 `TypeError`，消息中带 `AMAMO_CONFIG_*` code。
+- 非法 object schema 或其它配置数据会抛出 `TypeError`，消息中带 `AMAMO_CONFIG_*` code。
 - 原生解析、schema、媒体、缓存和 manifest 失败会变成名为 `AmamoMdxError` 的错误，并带
   `diagnostics` 数组。
 - Shiki 初始化和未知语言失败是普通 `Error`。

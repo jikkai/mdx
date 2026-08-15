@@ -39,17 +39,8 @@ aggregate cause 中，不是顶层 loader 错误。
 
 根包和平台包要求使用 Node.js 20.19 或更新版本。
 
-## Shiki 引擎是独立选择
+## Shiki 不能替代原生绑定
 
-原生 target 不会选择高亮器引擎，请单独配置 Shiki：
-
-```ts
-highlight: {
-  provider: 'shiki',
-  engine: 'oniguruma', // 或 'javascript'
-  themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
-}
-```
-
-两个值都使用 Shiki 官方引擎实现。切换前请测试实际语言和主题集合；本包不保证两个引擎输出
-逐字节一致。
+`highlight.engine` 只决定围栏代码块如何高亮。选择 `javascript` 不会为 MDX 编译提供
+JavaScript 回退；应用仍然需要上表中匹配当前运行环境的平台包。高亮选项见
+[配置参考](/zh-CN/configuration/)。

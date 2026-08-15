@@ -121,7 +121,8 @@ remove call rejects with `AMAMO_COMPILER_DISPOSED`.
 
 Different boundaries fail differently:
 
-- Invalid plain-data config throws `TypeError` with an `AMAMO_CONFIG_*` code in its message.
+- Invalid object schemas or non-schema configuration data throw `TypeError` with an
+  `AMAMO_CONFIG_*` code in the message.
 - Native parsing, schema, media, cache, and manifest failures become an error named
   `AmamoMdxError` with a `diagnostics` array.
 - Shiki setup and unknown-language failures are ordinary `Error` values.

@@ -4,18 +4,18 @@ description: Exact defaults and behavior for collections, MDX, math, highlightin
 
 # Configuration
 
-`defineConfig` returns its argument unchanged. `normalizeConfig` is the runtime boundary: it rejects
-non-plain data, applies defaults, resolves paths, and returns the `IAmamoMDXConfig` used by every
-compiler and adapter.
+`defineConfig` returns its argument unchanged. `normalizeConfig` is the runtime boundary: it converts
+Zod collection schemas to JSON Schema, rejects other non-plain data, applies defaults, resolves
+paths, and returns the `IAmamoMDXConfig` used by every compiler and adapter.
 
 ```ts
-import { defineConfig } from '@amamo/mdx'
+import { defineConfig, z } from '@amamo/mdx'
 
 export default defineConfig({
   collections: {
     posts: {
       directory: 'content/posts',
-      schema: { type: 'object' },
+      schema: z.object({}),
     },
   },
 })
@@ -37,27 +37,24 @@ At least one collection is required.
 | `cache`              | enabled           | Persistent compiled records. Use `false` to disable.     |
 | `generatedDirectory` | `.amamo-mdx`      | Registry, declaration, and private Next index directory. |
 
-Functions, symbols, accessors, class instances, cycles, `undefined`, `bigint`, and non-finite numbers
-are rejected. This check runs after your configuration module itself has been imported; it does not
-sandbox that module.
+Apart from collection Zod schemas, functions, symbols, accessors, class instances, cycles,
+`undefined`, `bigint`, and non-finite numbers are rejected. This check runs after your configuration
+module itself has been imported; it does not sandbox that module.
 
 ## Collections
 
 ```ts
+import { z } from '@amamo/mdx'
+
 collections: {
   posts: {
     directory: 'content/posts',
     extensions: ['.mdx'],
     locales: { default: 'en', names: ['en', 'zh-CN'] },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        draft: { type: 'boolean', default: false },
-      },
-      required: ['title'],
-    },
+    schema: z.object({
+      title: z.string(),
+      draft: z.boolean().default(false),
+    }),
     slug: { indexNames: ['index', 'page'] },
   },
 }
@@ -68,12 +65,15 @@ collections: {
 | `directory`       | required            | Resolved from `root`; the directory must exist before `build()`. |
 | `extensions`      | `['.mdx']`          | Included suffixes. Every value must begin with `.`.              |
 | `locales`         | none                | Optional filename-based locale mapping.                          |
-| `schema`          | required            | JSON Schema Draft 2020-12 for YAML frontmatter.                  |
+| `schema`          | required            | Zod object schema for YAML frontmatter.                          |
 | `slug.indexNames` | `['index', 'page']` | Basenames omitted from the derived slug.                         |
 
-Schema defaults declared under `properties`, `items`, and `allOf` are applied before validation.
-Values are never coerced. Validation diagnostics may contain submitted values; do not expose raw
-build errors to untrusted users.
+The package keeps Zod internal and exposes its compatible `z` builder. The config boundary is the
+structural `IFrontmatterSchema` interface, so another compatible object schema can also be passed.
+The object schema is converted to JSON Schema Draft 2020-12; raw JSON Schema objects are rejected.
+Rust applies `.default()` values before validation, but it does not run Zod parsing, coercion,
+transforms, or custom refinements. Use JSON-Schema-representable types and built-in checks. Validation
+diagnostics may contain submitted values; do not expose raw build errors to untrusted users.
 
 When locales are configured, an unsuffixed file uses the default locale. A recognized suffix such as
 `page.zh-CN.mdx` selects that locale. The default locale must appear in `names`. Document identity is

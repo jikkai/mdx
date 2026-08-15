@@ -40,17 +40,8 @@ manager caches are safe; a copied `node_modules` directory is not.
 
 The root and platform packages require Node.js 20.19 or newer.
 
-## Shiki engines are separate
+## Shiki does not replace the native binding
 
-The native target does not select the highlighter engine. Configure Shiki independently:
-
-```ts
-highlight: {
-  provider: 'shiki',
-  engine: 'oniguruma', // or 'javascript'
-  themes: { light: 'vitesse-light', dark: 'vitesse-dark' },
-}
-```
-
-Both values use Shiki's official engine implementations. Test your actual language and theme set
-before switching; this package does not promise byte-identical output between engines.
+`highlight.engine` only changes how fenced code is highlighted. Choosing `javascript` does not
+provide a JavaScript fallback for MDX compilation; the application still needs one of the matching
+platform packages above. See [Configuration](/configuration/) for highlighting options.

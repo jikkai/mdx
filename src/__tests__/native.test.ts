@@ -7,7 +7,7 @@ import { test } from 'vitest'
 
 import type { IAmamoMdxConfig } from '../config.js'
 
-import { normalizeConfig } from '../config.js'
+import { normalizeConfig, z } from '../config.js'
 import {
   AmamoMdxError,
   prepareNativeBatch,
@@ -22,16 +22,11 @@ const sourceConfig: IAmamoMdxConfig = {
   collections: {
     posts: {
       directory: 'content/posts',
-      schema: {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          draft: { type: 'boolean', default: false },
-          category: { type: 'string' },
-        },
-        required: ['title'],
-      },
+      schema: z.object({
+        title: z.string(),
+        draft: z.boolean().default(false),
+        category: z.string().optional(),
+      }),
     },
   },
 }
@@ -81,11 +76,7 @@ test('counts CJK text but excludes code from reading time', () => {
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: {
-          type: 'object',
-          properties: { title: { type: 'string' } },
-          required: ['title'],
-        },
+        schema: z.object({ title: z.string() }),
       },
     },
     derived: { readingTime: true },
@@ -412,14 +403,10 @@ test('persists complete records and recovers a corrupt cache entry', async () =>
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: {
-          type: 'object',
-          properties: {
-            title: { type: 'string' },
-            category: { type: 'string' },
-          },
-          required: ['title'],
-        },
+        schema: z.object({
+          title: z.string(),
+          category: z.string().optional(),
+        }),
       },
     },
     manifests: {

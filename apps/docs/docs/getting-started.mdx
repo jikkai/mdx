@@ -40,25 +40,21 @@ Save it as `content/posts/hello.mdx`.
 
 ## Define the collection
 
-Configuration must be plain serializable data. `defineConfig` is an identity helper that exposes the
-config shape to TypeScript-aware tooling; validation and defaults are applied when a compiler or
-adapter is created.
+Collection schemas use the package's Zod-compatible `z.object`; every other configuration value
+must be plain serializable data. `defineConfig` is an identity helper that exposes the config shape
+to TypeScript-aware tooling; schema conversion, validation, and defaults are applied when a compiler
+or adapter is created.
 
 ```js
 // amamo.config.mjs
-import { defineConfig } from '@amamo/mdx'
+import { defineConfig, z } from '@amamo/mdx'
 
 export default defineConfig({
   root: import.meta.dirname,
   collections: {
     posts: {
       directory: 'content/posts',
-      schema: {
-        $schema: 'https://json-schema.org/draft/2020-12/schema',
-        type: 'object',
-        properties: { title: { type: 'string' } },
-        required: ['title'],
-      },
+      schema: z.object({ title: z.string() }),
     },
   },
   manifests: {
@@ -186,5 +182,4 @@ With the config above, the first build writes:
 Add `.amamo-mdx/` to the host repository's ignore file. Unchanged shared files and manifests are not
 rewritten.
 
-Next, read [Configuration](/configuration/) for every default or [Security](/security/) before
-storing protected data in frontmatter.
+Next, read [Configuration](/configuration/) for every available option and its default.

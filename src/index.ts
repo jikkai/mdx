@@ -4,6 +4,7 @@ export type {
   ICacheConfig,
   ICollectionConfig,
   IDerivedConfig,
+  IFrontmatterSchema,
   IHighlightConfig,
   ILocaleConfig,
   IManifestConfig,
@@ -14,7 +15,7 @@ export type {
   JsonValue,
   ManifestField,
 } from './config.js'
-export { defineConfig, normalizeConfig } from './config.js'
+export { defineConfig, normalizeConfig, z } from './config.js'
 export type { IBuildResult, ICompiler, ITransformResult } from './compiler.js'
 export { createCompiler } from './compiler.js'
 export type { IDiagnostic } from './native.js'

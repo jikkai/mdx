@@ -2,19 +2,18 @@ import assert from 'node:assert/strict'
 
 import { test } from 'vitest'
 
-import { defineConfig, normalizeConfig } from '../config.js'
+import type { IFrontmatterSchema } from '../config.js'
+import { defineConfig, normalizeConfig, z } from '../config.js'
 
-test('normalizes plain configuration and rejects executable values', () => {
+const emptySchema = z.object({})
+
+test('normalizes Zod configuration and rejects executable values', () => {
   const config = defineConfig({
     root: '/project',
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: {
-          type: 'object',
-          properties: { title: { type: 'string' } },
-          required: ['title'],
-        },
+        schema: z.object({ title: z.string() }),
       },
     },
   })
@@ -22,6 +21,13 @@ test('normalizes plain configuration and rejects executable values', () => {
   const normalized = normalizeConfig(config)
   const posts = normalized.collections.posts
   assert.ok(posts)
+  assert.deepEqual(posts.schema, {
+    $schema: 'https://json-schema.org/draft/2020-12/schema',
+    type: 'object',
+    properties: { title: { type: 'string' } },
+    required: ['title'],
+    additionalProperties: false,
+  })
   assert.equal(posts.directory, '/project/content/posts')
   assert.equal(normalized.generatedDirectory, '/project/.amamo-mdx')
   assert.equal(normalized.cache.directory, '/project/.amamo-mdx/cache')
@@ -35,6 +41,16 @@ test('normalizes plain configuration and rejects executable values', () => {
   assert.throws(
     () => normalizeConfig({ ...config, derived: { readingTime: (() => true) as never } }),
     /AMAMO_CONFIG_NOT_SERIALIZABLE/,
+  )
+  assert.throws(
+    () =>
+      normalizeConfig({
+        ...config,
+        collections: {
+          posts: { ...config.collections.posts, schema: { type: 'object' } },
+        },
+      } as never),
+    /AMAMO_CONFIG_INVALID: collections\.posts\.schema must be a compatible object schema/,
   )
 })
 
@@ -54,13 +70,47 @@ test('rejects cyclic and non-plain configuration', () => {
   )
 })
 
+test('accepts a structurally compatible object schema', () => {
+  const schema: IFrontmatterSchema = {
+    shape: { title: {} },
+    toJSONSchema: () => ({
+      type: 'object',
+      properties: { title: { type: 'string' } },
+      required: ['title'],
+    }),
+  }
+
+  const normalized = normalizeConfig({
+    root: '/project',
+    collections: { posts: { directory: 'content/posts', schema } },
+  })
+
+  assert.deepEqual(normalized.collections.posts?.schema, schema.toJSONSchema())
+})
+
+test('rejects Zod transforms that JSON Schema cannot represent', () => {
+  assert.throws(
+    () =>
+      normalizeConfig({
+        root: '/project',
+        collections: {
+          posts: {
+            directory: 'content/posts',
+            schema: z.object({ title: z.string().transform((value) => value.length) }),
+          },
+        },
+      }),
+    /AMAMO_CONFIG_INVALID: collections\.posts\.schema Transforms cannot be represented/,
+  )
+})
+
 test('normalizes math configuration', () => {
   const config = defineConfig({
     root: '/project',
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: { type: 'object' },
+        schema: emptySchema,
       },
     },
   })
@@ -100,7 +150,7 @@ test('rejects the removed top-level math location', () => {
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: { type: 'object' },
+        schema: emptySchema,
       },
     },
     math: {},
@@ -118,7 +168,7 @@ test('normalizes optional MDX extensions with GFM inheritance', () => {
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: { type: 'object' },
+        schema: emptySchema,
       },
     },
   })
@@ -165,7 +215,7 @@ test('rejects math macro names without a leading backslash', () => {
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: { type: 'object' },
+        schema: emptySchema,
       },
     },
     mdx: { math: { macros: { RR: '\\mathbb{R}' } } },
@@ -183,7 +233,7 @@ test('bounds configured math macro bytes', () => {
     collections: {
       posts: {
         directory: 'content/posts',
-        schema: { type: 'object' },
+        schema: emptySchema,
       },
     },
   })

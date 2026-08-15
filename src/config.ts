@@ -2,6 +2,10 @@ import { Buffer } from 'node:buffer'
 import { existsSync, realpathSync } from 'node:fs'
 import path from 'node:path'
 
+import * as z from 'zod'
+
+export { z }
+
 export type JsonValue =
   | null
   | boolean
@@ -27,11 +31,16 @@ export interface ISlugConfig {
   indexNames?: string[]
 }
 
+export interface IFrontmatterSchema {
+  readonly shape: Readonly<Record<string, unknown>>
+  toJSONSchema(): unknown
+}
+
 export interface ICollectionConfig {
   directory: string
   extensions?: string[]
   locales?: ILocaleConfig
-  schema: { [key: string]: JsonValue }
+  schema: IFrontmatterSchema
   slug?: ISlugConfig
 }
 
@@ -181,7 +190,13 @@ function notSerializable(location: string, reason: string): never {
   throw new TypeError(`AMAMO_CONFIG_NOT_SERIALIZABLE: ${location} ${reason}`)
 }
 
-function assertPlainData(value: unknown, location: string, active: WeakSet<object>): void {
+function assertPlainData(
+  value: unknown,
+  location: string,
+  active: WeakSet<object>,
+  segments: string[] = [],
+): void {
+  if (segments.length === 3 && segments[0] === 'collections' && segments[2] === 'schema') return
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) notSerializable(location, 'must be a finite number')
@@ -201,7 +216,7 @@ function assertPlainData(value: unknown, location: string, active: WeakSet<objec
     const descriptor = Object.getOwnPropertyDescriptor(value, key)
     if (!descriptor || !('value' in descriptor))
       notSerializable(`${location}.${key}`, 'contains an accessor')
-    assertPlainData(descriptor.value, `${location}.${key}`, active)
+    assertPlainData(descriptor.value, `${location}.${key}`, active, [...segments, key])
   }
   active.delete(value)
 }
@@ -232,13 +247,40 @@ function normalizeCollection(
     root,
     requireNonEmpty(config.directory, `collections.${name}.directory`),
   )
+  if (
+    typeof config.schema?.shape !== 'object' ||
+    config.schema.shape === null ||
+    typeof config.schema.toJSONSchema !== 'function'
+  ) {
+    throw new TypeError(
+      `AMAMO_CONFIG_INVALID: collections.${name}.schema must be a compatible object schema`,
+    )
+  }
+  let schema: { [key: string]: JsonValue }
+  try {
+    schema = JSON.parse(JSON.stringify(config.schema.toJSONSchema())) as {
+      [key: string]: JsonValue
+    }
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : 'could not be converted to JSON Schema'
+    throw new TypeError(`AMAMO_CONFIG_INVALID: collections.${name}.schema ${reason}`, {
+      cause: error,
+    })
+  }
+  if (schema.type !== 'object') {
+    throw new TypeError(
+      `AMAMO_CONFIG_INVALID: collections.${name}.schema must convert to an object schema`,
+    )
+  }
+  assertPlainData(schema, `collections.${name}.schema`, new WeakSet())
+
   return {
     directory: existsSync(directory) ? realpathSync.native(directory) : directory,
     extensions: [...extensions],
     locales: config.locales
       ? { default: config.locales.default, names: [...config.locales.names] }
       : undefined,
-    schema: config.schema,
+    schema,
     slug: { indexNames: [...(config.slug?.indexNames ?? ['index', 'page'])] },
   }
 }

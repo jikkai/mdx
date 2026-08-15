@@ -4,17 +4,18 @@ description: 集合、MDX、数学公式、高亮、媒体、派生字段、mani
 
 # 配置
 
-`defineConfig` 会原样返回参数。`normalizeConfig` 才是运行时边界：它拒绝非纯数据、应用默认值、
-解析路径，并返回所有编译器和适配器共用的 `IAmamoMDXConfig`。
+`defineConfig` 会原样返回参数。`normalizeConfig` 才是运行时边界：它把集合的 Zod schema 转成
+JSON Schema、拒绝其它非纯数据、应用默认值、解析路径，并返回所有编译器和适配器共用的
+`IAmamoMDXConfig`。
 
 ```ts
-import { defineConfig } from '@amamo/mdx'
+import { defineConfig, z } from '@amamo/mdx'
 
 export default defineConfig({
   collections: {
     posts: {
       directory: 'content/posts',
-      schema: { type: 'object' },
+      schema: z.object({}),
     },
   },
 })
@@ -36,40 +37,40 @@ export default defineConfig({
 | `cache`              | 启用            | 持久化编译记录；设为 `false` 可禁用。            |
 | `generatedDirectory` | `.amamo-mdx`    | 注册表、声明文件和 Next 私有索引目录。           |
 
-函数、symbol、访问器、类实例、循环引用、`undefined`、`bigint` 和非有限数字都会被拒绝。检查
-发生在配置模块本身已经 import 之后，因此不会沙箱化那个模块。
+除集合的 Zod schema 外，函数、symbol、访问器、类实例、循环引用、`undefined`、`bigint` 和
+非有限数字都会被拒绝。检查发生在配置模块本身已经 import 之后，因此不会沙箱化那个模块。
 
 ## 集合
 
 ```ts
+import { z } from '@amamo/mdx'
+
 collections: {
   posts: {
     directory: 'content/posts',
     extensions: ['.mdx'],
     locales: { default: 'en', names: ['en', 'zh-CN'] },
-    schema: {
-      $schema: 'https://json-schema.org/draft/2020-12/schema',
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        draft: { type: 'boolean', default: false },
-      },
-      required: ['title'],
-    },
+    schema: z.object({
+      title: z.string(),
+      draft: z.boolean().default(false),
+    }),
     slug: { indexNames: ['index', 'page'] },
   },
 }
 ```
 
-| 键                | 默认值              | 行为                                                 |
-| ----------------- | ------------------- | ---------------------------------------------------- |
-| `directory`       | 必填                | 从 `root` 解析；调用 `build()` 前目录必须存在。      |
-| `extensions`      | `['.mdx']`          | 纳入集合的后缀；每项必须以 `.` 开头。                |
-| `locales`         | 无                  | 可选的基于文件名的 locale 映射。                     |
-| `schema`          | 必填                | 校验 YAML frontmatter 的 JSON Schema Draft 2020-12。 |
-| `slug.indexNames` | `['index', 'page']` | 推导 slug 时省略的 basename。                        |
+| 键                | 默认值              | 行为                                            |
+| ----------------- | ------------------- | ----------------------------------------------- |
+| `directory`       | 必填                | 从 `root` 解析；调用 `build()` 前目录必须存在。 |
+| `extensions`      | `['.mdx']`          | 纳入集合的后缀；每项必须以 `.` 开头。           |
+| `locales`         | 无                  | 可选的基于文件名的 locale 映射。                |
+| `schema`          | 必填                | 校验 YAML frontmatter 的 Zod object schema。    |
+| `slug.indexNames` | `['index', 'page']` | 推导 slug 时省略的 basename。                   |
 
-校验前会应用 `properties`、`items` 和 `allOf` 中声明的 schema 默认值，但绝不做类型转换。
+包内维护 Zod，并对外提供兼容的 `z` builder。配置边界是结构化的 `IFrontmatterSchema` 接口，
+因此也可以传入其它兼容的 object schema。Object schema 会转换为 JSON Schema Draft 2020-12；
+原始 JSON Schema 对象会被拒绝。Rust 会在校验前应用 `.default()` 值，但不会执行 Zod parse、
+类型转换、transform 或自定义 refinement。请只使用可表示为 JSON Schema 的类型和内置检查。
 诊断可能包含用户提交的值；不要把原始构建错误暴露给不可信用户。
 
 配置 locale 后，无后缀文件使用默认 locale；`page.zh-CN.mdx` 这样的已知后缀会选择对应 locale。

@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 
 import type { IAmamoMdxConfig } from '../config.js'
+import { z } from '../config.js'
 
 export interface ICompilerFixture {
   cleanup(): Promise<void>
@@ -49,14 +50,10 @@ const answer: number = 42
       collections: {
         posts: {
           directory: 'content/posts',
-          schema: {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              category: { type: 'string' },
-            },
-            required: ['title'],
-          },
+          schema: z.object({
+            title: z.string(),
+            category: z.string().optional(),
+          }),
         },
       },
       derived: { readingTime: true },
