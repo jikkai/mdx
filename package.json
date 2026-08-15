@@ -1,6 +1,6 @@
 {
   "name": "@amamo/mdx",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A native MDX content compiler with Vite and Next adapters",
   "homepage": "https://jikkai.github.io/mdx/",
   "license": "MIT",
