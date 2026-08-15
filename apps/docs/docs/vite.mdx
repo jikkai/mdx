@@ -41,9 +41,8 @@ export function Page() {
 ```
 
 For a recognized collection file, the `transform` hook ignores the incoming source string and asks
-the compiler for the current JavaScript module. Sensitive frontmatter has already been removed,
-Markdown media has been rewritten, and enabled Shiki output has been injected before Vite receives
-the code.
+the compiler for the current JavaScript module. Frontmatter has already been validated, Markdown
+media has been rewritten, and enabled Shiki output has been injected before Vite receives the code.
 
 ## Lifecycle
 

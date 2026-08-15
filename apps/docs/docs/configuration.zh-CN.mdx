@@ -56,7 +56,6 @@ collections: {
       },
       required: ['title'],
     },
-    sensitive: ['accessToken'],
     slug: { indexNames: ['index', 'page'] },
   },
 }
@@ -68,11 +67,10 @@ collections: {
 | `extensions`      | `['.mdx']`          | 纳入集合的后缀；每项必须以 `.` 开头。                |
 | `locales`         | 无                  | 可选的基于文件名的 locale 映射。                     |
 | `schema`          | 必填                | 校验 YAML frontmatter 的 JSON Schema Draft 2020-12。 |
-| `sensitive`       | `[]`                | 校验后从公开记录中移除的顶层 frontmatter 名称。      |
 | `slug.indexNames` | `['index', 'page']` | 推导 slug 时省略的 basename。                        |
 
 校验前会应用 `properties`、`items` 和 `allOf` 中声明的 schema 默认值，但绝不做类型转换。
-由于校验先于敏感字段移除，诊断可能包含用户提交的敏感值；不要把原始构建错误暴露给不可信用户。
+诊断可能包含用户提交的值；不要把原始构建错误暴露给不可信用户。
 
 配置 locale 后，无后缀文件使用默认 locale；`page.zh-CN.mdx` 这样的已知后缀会选择对应 locale。
 默认 locale 必须出现在 `names` 中。文档身份推导如下：
@@ -284,7 +282,7 @@ manifests: {
 缺失、null、object、array 和重复值都会让构建失败。缺失或 null 的排序值在升降序中都保持最后，
 最终用文档 key 打破平局。
 
-投影路径可以读取顶层公开 frontmatter，或以下保留值：
+投影路径可以读取顶层 frontmatter，或以下保留值：
 
 - `collection`、`file`、`key`、`locale` 和 `slug`
 - `frontmatter.<path>`
@@ -299,8 +297,7 @@ manifests: {
 | `'sha256'`   | 字符串或 JSON 序列化值的小写 SHA-256 hex；缺失时使用 `default` 或 null。 |
 | `'mediaUrl'` | 绝对或外部 URL 原样通过；相对字符串映射为 root-relative URL。            |
 
-列在 `sensitive` 中的顶层字段只能使用 `exists` 或 `sha256`。`mediaUrl` 只是路径投影，不会
-检查文件存在性，也不会创建静态 import。
+`mediaUrl` 只是路径投影，不会检查文件存在性，也不会创建静态 import。
 
 ## 缓存
 

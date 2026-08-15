@@ -40,8 +40,8 @@ export function Page() {
 ```
 
 对于属于集合的文件，`transform` hook 会忽略传入的源码字符串，向编译器请求当前 JavaScript
-模块。Vite 收到代码前，敏感 frontmatter 已被移除，Markdown 媒体已被重写，启用的 Shiki
-结果也已注入。
+模块。Vite 收到代码前，frontmatter 已通过校验，Markdown 媒体已被重写，启用的 Shiki 结果
+也已注入。
 
 ## 生命周期
 

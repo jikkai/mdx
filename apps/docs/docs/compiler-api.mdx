@@ -87,7 +87,7 @@ interface ITransformResult {
 
 - `code` is the compiled JavaScript module body.
 - `map` is currently always `null`.
-- `record.frontmatter` excludes top-level sensitive fields.
+- `record.frontmatter` contains the complete validated frontmatter object.
 - `record.derived` contains enabled reading-time and last-modified values.
 - `record.hash` is the BLAKE3 digest of the source bytes.
 - `record.cacheKey` also includes config, platform, path, and optional modification metadata.
@@ -145,7 +145,7 @@ interface IDiagnostic {
 
 The shape reserves `range` and `hint`, but they are currently omitted. A batch stops at the first
 failing document or stage rather than aggregating every failure. Schema messages may quote submitted
-frontmatter values, including fields later marked sensitive.
+frontmatter values.
 
 ## Shared generated files
 

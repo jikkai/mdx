@@ -38,8 +38,7 @@ pub struct PreparedMdx {
 #[derive(Debug)]
 pub struct ParsedFrontmatter {
     pub body: String,
-    pub public: Value,
-    pub sensitive: Value,
+    pub frontmatter: Value,
 }
 
 pub fn parse_frontmatter(
@@ -48,7 +47,7 @@ pub fn parse_frontmatter(
     collection: &NativeCollectionConfig,
 ) -> Result<ParsedFrontmatter, Vec<Diagnostic>> {
     let (yaml, body) = split_frontmatter(file, source)?;
-    let mut public = match yaml {
+    let mut frontmatter = match yaml {
         Some(value) => yaml_serde::from_str::<Value>(value).map_err(|error| {
             vec![Diagnostic::error(
                 "AMAMO_FRONTMATTER_INVALID",
@@ -58,10 +57,10 @@ pub fn parse_frontmatter(
         })?,
         None => Value::Object(Map::new()),
     };
-    if public.is_null() {
-        public = Value::Object(Map::new());
+    if frontmatter.is_null() {
+        frontmatter = Value::Object(Map::new());
     }
-    if !public.is_object() {
+    if !frontmatter.is_object() {
         return Err(vec![Diagnostic::error(
             "AMAMO_FRONTMATTER_INVALID",
             Some(file),
@@ -69,19 +68,11 @@ pub fn parse_frontmatter(
         )]);
     }
 
-    apply_schema_defaults_and_validate(file, &mut public, collection)?;
-    let mut sensitive = Map::new();
-    let public_object = public.as_object_mut().expect("object checked above");
-    for field in &collection.sensitive {
-        if let Some(value) = public_object.remove(field) {
-            sensitive.insert(field.clone(), value);
-        }
-    }
+    apply_schema_defaults_and_validate(file, &mut frontmatter, collection)?;
 
     Ok(ParsedFrontmatter {
         body: body.to_owned(),
-        public,
-        sensitive: Value::Object(sensitive),
+        frontmatter,
     })
 }
 
@@ -394,7 +385,7 @@ mod tests {
     use super::{finish_mdx, parse_frontmatter, prepare_mdx};
 
     #[test]
-    fn validates_defaults_without_leaking_sensitive_fields() {
+    fn validates_frontmatter_and_applies_defaults() {
         let collection = NativeCollectionConfig {
             schema: json!({
                 "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -402,19 +393,17 @@ mod tests {
                 "properties": {
                     "title": { "type": "string" },
                     "draft": { "type": "boolean", "default": false },
-                    "password": { "type": "string" }
+                    "category": { "type": "string" }
                 },
                 "required": ["title"]
             }),
-            sensitive: vec!["password".into()],
         };
-        let source = "---\ntitle: Hello\npassword: secret\n---\n# Hello\n";
+        let source = "---\ntitle: Hello\ncategory: article\n---\n# Hello\n";
 
         let parsed = parse_frontmatter("/project/post.mdx", source, &collection).unwrap();
 
-        assert_eq!(parsed.public["draft"], false);
-        assert!(parsed.public.get("password").is_none());
-        assert_eq!(parsed.sensitive["password"], "secret");
+        assert_eq!(parsed.frontmatter["draft"], false);
+        assert_eq!(parsed.frontmatter["category"], "article");
         assert_eq!(parsed.body, "# Hello\n");
     }
 
@@ -427,7 +416,6 @@ mod tests {
                 "properties": { "title": { "type": "string" } },
                 "required": ["title"]
             }),
-            sensitive: vec![],
         };
 
         let diagnostics =

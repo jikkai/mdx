@@ -28,23 +28,22 @@ const sourceConfig: IAmamoMdxConfig = {
         properties: {
           title: { type: 'string' },
           draft: { type: 'boolean', default: false },
-          password: { type: 'string' },
+          category: { type: 'string' },
         },
         required: ['title'],
       },
-      sensitive: ['password'],
     },
   },
 }
 const config = normalizeConfig(sourceConfig)
 
-test('loads the real addon and returns only public frontmatter', () => {
+test('loads the real addon and returns validated frontmatter', () => {
   const batch = prepareNativeBatch(config, [
     {
       collection: 'posts',
       file: '/project/content/posts/hello.mdx',
       key: 'hello',
-      source: '---\ntitle: Hello\npassword: secret\n---\n# Hello\n',
+      source: '---\ntitle: Hello\ncategory: article\n---\n# Hello\n',
     },
   ])
 
@@ -52,8 +51,7 @@ test('loads the real addon and returns only public frontmatter', () => {
   const records = batch.finish([])
   assert.equal(records[0]?.frontmatter.title, 'Hello')
   assert.equal(records[0]?.frontmatter.draft, false)
-  assert.equal(records[0]?.frontmatter.password, undefined)
-  assert.doesNotMatch(JSON.stringify(records), /secret/)
+  assert.equal(records[0]?.frontmatter.category, 'article')
 })
 
 test('maps schema failures to structured diagnostics', () => {
@@ -406,7 +404,7 @@ test('namespaces footnote anchors per document', () => {
   assert.doesNotMatch(second, /id: "#fn-/)
 })
 
-test('persists safe records and recovers a corrupt cache entry', async () => {
+test('persists complete records and recovers a corrupt cache entry', async () => {
   const root = await mkdtemp(path.join(tmpdir(), 'amamo-mdx-native-'))
   const cachedConfig = normalizeConfig({
     highlight: false,
@@ -418,11 +416,10 @@ test('persists safe records and recovers a corrupt cache entry', async () => {
           type: 'object',
           properties: {
             title: { type: 'string' },
-            password: { type: 'string' },
+            category: { type: 'string' },
           },
           required: ['title'],
         },
-        sensitive: ['password'],
       },
     },
     manifests: {
@@ -431,8 +428,9 @@ test('persists safe records and recovers a corrupt cache entry', async () => {
         key: 'title',
         fields: {
           title: 'title',
-          passwordHash: { from: 'password', transform: 'sha256' },
-          protected: { from: 'password', transform: 'exists' },
+          category: 'category',
+          categoryHash: { from: 'category', transform: 'sha256' },
+          categorized: { from: 'category', transform: 'exists' },
         },
       },
     },
@@ -441,7 +439,7 @@ test('persists safe records and recovers a corrupt cache entry', async () => {
     collection: 'posts',
     file: path.join(root, 'content/posts/hello.mdx'),
     key: 'hello',
-    source: '---\ntitle: Hello\npassword: secret\n---\n# Hello\n',
+    source: '---\ntitle: Hello\ncategory: article\n---\n# Hello\n',
   }
 
   try {
@@ -453,17 +451,17 @@ test('persists safe records and recovers a corrupt cache entry', async () => {
       record.cacheKey.slice(0, 2),
       `${record.cacheKey}.json`,
     )
-    assert.doesNotMatch(await readFile(cacheFile, 'utf8'), /secret/)
+    assert.match(await readFile(cacheFile, 'utf8'), /article/)
 
     const rendered = renderNativeManifests(cachedConfig, first)
     assert.equal(rendered.length, 1)
-    assert.match(rendered[0]?.contents ?? '', /2bb80d537b1da3e/)
-    assert.doesNotMatch(rendered[0]?.contents ?? '', /secret/)
+    assert.match(rendered[0]?.contents ?? '', /84393add8c489d33/)
+    assert.match(rendered[0]?.contents ?? '', /article/)
 
     await writeFile(cacheFile, '{truncated')
     const recovered = prepareNativeBatch(cachedConfig, [input]).finish([])
     assert.equal(recovered[0]?.diagnostics[0]?.code, 'AMAMO_CACHE_CORRUPT')
-    assert.doesNotMatch(await readFile(cacheFile, 'utf8'), /secret/)
+    assert.match(await readFile(cacheFile, 'utf8'), /article/)
     assert.equal(pruneNativeCache(cachedConfig.cache.directory, []), 1)
   } finally {
     await rm(root, { recursive: true, force: true })

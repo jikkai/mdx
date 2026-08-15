@@ -24,7 +24,7 @@ export async function createCompilerFixture(): Promise<ICompilerFixture> {
   const post = path.join(content, 'hello.mdx')
   const source = `---
 title: Hello
-password: secret
+category: article
 ---
 # Hello
 
@@ -53,11 +53,10 @@ const answer: number = 42
             type: 'object',
             properties: {
               title: { type: 'string' },
-              password: { type: 'string' },
+              category: { type: 'string' },
             },
             required: ['title'],
           },
-          sensitive: ['password'],
         },
       },
       derived: { readingTime: true },
@@ -77,8 +76,9 @@ const answer: number = 42
           fields: {
             key: 'key',
             title: 'title',
-            protected: { from: 'password', transform: 'exists' },
-            passwordHash: { from: 'password', transform: 'sha256' },
+            category: 'category',
+            categorized: { from: 'category', transform: 'exists' },
+            categoryHash: { from: 'category', transform: 'sha256' },
           },
         },
       },

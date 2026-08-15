@@ -23,8 +23,11 @@ test('build, warm build, update, and delete share one document index', async () 
       await readFile(fixture.collectionModule, 'utf8'),
       /import\("\.\.\/content\/posts\/hello\.mdx"\)/,
     )
-    assert.doesNotMatch(await readFile(fixture.publicManifest, 'utf8'), /secret/)
-    assert.doesNotMatch(await readFile(fixture.serverManifest, 'utf8'), /secret/)
+    assert.match(await readFile(fixture.collectionModule, 'utf8'), /article/)
+    assert.doesNotMatch(await readFile(fixture.publicManifest, 'utf8'), /article/)
+    const serverManifest = JSON.parse(await readFile(fixture.serverManifest, 'utf8'))
+    assert.equal(serverManifest.hello.category, 'article')
+    assert.equal(serverManifest.hello.categorized, true)
 
     const unchanged = await compiler.build()
     assert.equal(unchanged.compiled, 0)
@@ -43,7 +46,7 @@ test('build, warm build, update, and delete share one document index', async () 
 
     const generated = [fixture.collectionModule, fixture.publicManifest, fixture.serverManifest]
     const generatedSources = await Promise.all(generated.map((file) => readFile(file, 'utf8')))
-    generatedSources.forEach((source) => assert.doesNotMatch(source, /secret/))
+    generatedSources.forEach((source) => assert.doesNotMatch(source, /article/))
   } finally {
     await compiler.dispose()
     await fixture.cleanup()

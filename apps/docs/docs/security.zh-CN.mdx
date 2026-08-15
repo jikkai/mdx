@@ -1,11 +1,11 @@
 ---
-description: 可执行 MDX、敏感 frontmatter、诊断、媒体路径、manifest 和缓存产物的真实信任边界。
+description: 可执行 MDX、frontmatter、诊断、媒体路径、manifest 和缓存产物的真实信任边界。
 ---
 
 # 安全模型
 
-`@amamo/mdx` 只保护特定构建产物，不会把不可信 MDX 变安全。请把作者、配置模块、生成文件和
-部署目标当作彼此独立的信任边界。
+`@amamo/mdx` 不会分类或加密 frontmatter 字段，也不会把不可信 MDX 变安全。请把作者、配置
+模块、生成文件和部署目标当作彼此独立的信任边界。
 
 ## MDX 可以执行代码
 
@@ -15,56 +15,39 @@ MDX 可以包含 ESM import 和 JavaScript 表达式。编译器会把它们输�
 只编译你信任、并允许其以宿主应用权限运行代码的作者内容。JSON Schema 只校验 frontmatter
 数据，不会检查或沙箱化 MDX 程序。
 
-## 敏感 frontmatter
+## Frontmatter 是普通数据
 
-声明不得进入成功编译产物的顶层字段：
+应用 schema 默认值并完成校验后，完整的 frontmatter 对象会由编译后的 MDX 模块导出，并写入
+文档记录、缓存记录和生成的集合注册表。配置的 manifest 会包含它投影的字段。这里没有字段级
+脱敏、加密或解密。
 
-```ts
-collections: {
-  posts: {
-    directory: 'content/posts',
-    schema: { /* ... */ },
-    sensitive: ['accessToken', 'internalNotes'],
-  },
-}
-```
-
-成功编译的顺序是：
-
-1. 解析全部 YAML frontmatter。
-2. 对完整对象应用 schema 默认值并校验。
-3. 把每个顶层敏感字段移出公开 frontmatter。
-4. 只计算配置明确允许的 manifest 投影。
-5. 输出不含敏感字段明文的模块、记录和 manifest。
-
-`sensitive` 只匹配顶层名称。声明 `credentials` 会移除整个顶层 `credentials` 值，而不是单独
-分类其中的 `credentials.password`。
+需要保护某个值时，请把密文存入普通 frontmatter 字段，并在消费端解密；或者不要把该值放入
+frontmatter。不要把加密密钥放在同一份内容或生成产物中。
 
 ## 诊断可能包含提交值
 
-Schema 校验发生在敏感字段移除之前，validator 消息可能引用非法值。即使字段列在
-`sensitive` 中，也不要把原始编译错误或构建日志返回给不可信作者。
+Schema validator 消息可能引用用户提交的非法值。不要把原始编译错误或构建日志返回给不可信
+作者。
 
 成功结果的 warning 诊断保存在文档记录中。编译器和 Vite 插件不会自动打印它们，因此由调用方
 控制暴露位置。
 
 ## Manifest 投影
 
-敏感源只能使用以下 transform：
+任意 frontmatter 源都可以使用这些 transform：
 
 ```ts
 fields: {
-  tokenPresent: { from: 'accessToken', transform: 'exists' },
-  tokenFingerprint: { from: 'accessToken', transform: 'sha256' },
+  categoryPresent: { from: 'category', transform: 'exists' },
+  categoryFingerprint: { from: 'category', transform: 'sha256' },
 }
 ```
 
 - `exists` 只暴露值是否存在且非 null。
 - `sha256` 输出确定性的无盐 digest。
 
-原始 SHA-256 不是密码哈希函数。不要用这个投影存储或校验人类密码；请在宿主中使用专门的
-密码 KDF 和身份验证系统。只有在值本身有足够高熵，并且可以接受泄露相等关系时，确定性摘要
-才可能适用。
+原始 SHA-256 不是加密或密码哈希函数。transform 也不会从编译模块、记录或缓存中隐藏原始
+frontmatter 值。受保护值应由消费端管理加密；人类密码应使用专门的密码 KDF 和身份验证系统。
 
 `public`、`server` 之类的 manifest 名称没有访问控制语义。编译器只负责写配置路径；该路径
 是否公开由部署系统决定。
@@ -92,8 +75,8 @@ Manifest 的 `mediaUrl` transform 不同：它只按词法把相对值映射为 
 
 ## 缓存与产物写入
 
-缓存记录包含公开 frontmatter、派生数据、安全投影、依赖、诊断和编译模块，不包含敏感字段
-明文。高亮结果属于同一记录，不存在单独的磁盘高亮缓存。
+缓存记录包含完整的已校验 frontmatter、派生数据、投影、依赖、诊断和编译模块。高亮结果属于
+同一记录，不存在单独的磁盘高亮缓存。
 
 缓存、manifest 和三个共享生成文件可以位于不同的配置目录。应根据各自内容保护这些路径，
 不要假设它们全部位于 `generatedDirectory` 下。
@@ -105,8 +88,8 @@ rename 完成整文件替换；缓存记录不会执行 TypeScript 侧的字节�
 ## 部署检查清单
 
 - 只有可信作者能修改 MDX 及其 import。
-- 顶层敏感字段已在配置中列出。
+- 受保护值在进入 frontmatter 前已经加密，或根本不存入 frontmatter。
 - 不向不可信用户暴露原始校验错误。
 - 含私密元数据的 manifest 没有部署到公开路径。
 - symlink 目标变化会强制执行全新媒体编译。
-- 身份认证和密码存储不依赖 manifest 的 SHA-256 投影。
+- 身份认证和密码存储不依赖 frontmatter 或 manifest 的 SHA-256 投影。

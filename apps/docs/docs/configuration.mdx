@@ -58,24 +58,22 @@ collections: {
       },
       required: ['title'],
     },
-    sensitive: ['accessToken'],
     slug: { indexNames: ['index', 'page'] },
   },
 }
 ```
 
-| Key               | Default             | Behavior                                                                  |
-| ----------------- | ------------------- | ------------------------------------------------------------------------- |
-| `directory`       | required            | Resolved from `root`; the directory must exist before `build()`.          |
-| `extensions`      | `['.mdx']`          | Included suffixes. Every value must begin with `.`.                       |
-| `locales`         | none                | Optional filename-based locale mapping.                                   |
-| `schema`          | required            | JSON Schema Draft 2020-12 for YAML frontmatter.                           |
-| `sensitive`       | `[]`                | Top-level frontmatter names removed from public records after validation. |
-| `slug.indexNames` | `['index', 'page']` | Basenames omitted from the derived slug.                                  |
+| Key               | Default             | Behavior                                                         |
+| ----------------- | ------------------- | ---------------------------------------------------------------- |
+| `directory`       | required            | Resolved from `root`; the directory must exist before `build()`. |
+| `extensions`      | `['.mdx']`          | Included suffixes. Every value must begin with `.`.              |
+| `locales`         | none                | Optional filename-based locale mapping.                          |
+| `schema`          | required            | JSON Schema Draft 2020-12 for YAML frontmatter.                  |
+| `slug.indexNames` | `['index', 'page']` | Basenames omitted from the derived slug.                         |
 
 Schema defaults declared under `properties`, `items`, and `allOf` are applied before validation.
-Values are never coerced. Because validation happens before sensitive fields are removed, validation
-diagnostics may contain their submitted values; do not expose raw build errors to untrusted users.
+Values are never coerced. Validation diagnostics may contain submitted values; do not expose raw
+build errors to untrusted users.
 
 When locales are configured, an unsuffixed file uses the default locale. A recognized suffix such as
 `page.zh-CN.mdx` selects that locale. The default locale must appear in `names`. Document identity is
@@ -300,7 +298,7 @@ If `key` is configured, that name must exist in the projected record and resolve
 number, or boolean. Missing, null, object, array, and duplicate values fail the build. Missing or null
 sort values remain last in both directions; the document key breaks remaining ties.
 
-Projection paths can read top-level public frontmatter or these reserved values:
+Projection paths can read top-level frontmatter or these reserved values:
 
 - `collection`, `file`, `key`, `locale`, and `slug`
 - `frontmatter.<path>`
@@ -315,8 +313,8 @@ A field value can be a path string or `{ from, transform?, default? }`.
 | `'sha256'`   | Lowercase SHA-256 hex of a string or serialized JSON value; missing uses `default` or null. |
 | `'mediaUrl'` | Pass through absolute/external URLs or map a relative string to a root-relative URL.        |
 
-Top-level fields named in `sensitive` can only use `exists` or `sha256`. `mediaUrl` performs a path
-projection; it does not check that the file exists or create a static import.
+`mediaUrl` performs a path projection; it does not check that the file exists or create a static
+import.
 
 ## Cache
 

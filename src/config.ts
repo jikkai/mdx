@@ -32,7 +32,6 @@ export interface ICollectionConfig {
   extensions?: string[]
   locales?: ILocaleConfig
   schema: { [key: string]: JsonValue }
-  sensitive?: string[]
   slug?: ISlugConfig
 }
 
@@ -110,7 +109,6 @@ export interface INormalizedCollectionConfig {
   extensions: string[]
   locales?: ILocaleConfig
   schema: { [key: string]: JsonValue }
-  sensitive: string[]
   slug: {
     indexNames: string[]
   }
@@ -241,7 +239,6 @@ function normalizeCollection(
       ? { default: config.locales.default, names: [...config.locales.names] }
       : undefined,
     schema: config.schema,
-    sensitive: [...(config.sensitive ?? [])],
     slug: { indexNames: [...(config.slug?.indexNames ?? ['index', 'page'])] },
   }
 }

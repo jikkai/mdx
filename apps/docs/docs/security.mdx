@@ -1,11 +1,12 @@
 ---
-description: The actual trust boundary for executable MDX, sensitive frontmatter, diagnostics, media paths, manifests, and cached output.
+description: The actual trust boundary for executable MDX, frontmatter, diagnostics, media paths, manifests, and cached output.
 ---
 
 # Security model
 
-`@amamo/mdx` protects specific build outputs; it does not make untrusted MDX safe. Treat the author,
-configuration module, generated files, and deployment destination as separate trust boundaries.
+`@amamo/mdx` does not classify or encrypt frontmatter fields, and it does not make untrusted MDX
+safe. Treat the author, configuration module, generated files, and deployment destination as
+separate trust boundaries.
 
 ## MDX is executable
 
@@ -16,58 +17,43 @@ rendering.
 Compile only content from authors you trust to run code with the host application's privileges.
 JSON Schema validates frontmatter data; it does not inspect or sandbox the MDX program.
 
-## Sensitive frontmatter
+## Frontmatter is ordinary data
 
-Declare top-level fields that must not enter successful compiled output:
+After schema defaults and validation, the complete frontmatter object is exported by the compiled
+MDX module and stored in document records, cache records, and the generated collection registry.
+Configured manifests contain the fields that they project. There is no field-level redaction,
+encryption, or decryption.
 
-```ts
-collections: {
-  posts: {
-    directory: 'content/posts',
-    schema: { /* ... */ },
-    sensitive: ['accessToken', 'internalNotes'],
-  },
-}
-```
-
-The successful compilation path is:
-
-1. Parse all YAML frontmatter.
-2. Apply schema defaults and validate the complete object.
-3. Move each named top-level sensitive field out of public frontmatter.
-4. Compute only explicitly allowed manifest projections.
-5. Emit modules, records, and manifests without the plaintext sensitive values.
-
-`sensitive` names are top-level only. Naming `credentials` does not separately classify nested
-`credentials.password`; the entire top-level `credentials` value is removed.
+To protect a value, store ciphertext in an ordinary frontmatter field and decrypt it in the
+consumer, or keep the value outside frontmatter. Do not store the encryption key in the same content
+or generated output.
 
 ## Diagnostics can contain submitted values
 
-Schema validation runs before sensitive fields are removed, and validator messages may quote the
-invalid value. Do not return raw compiler errors or build logs to an untrusted author merely because
-the field is listed in `sensitive`.
+Schema validator messages may quote an invalid submitted value. Do not return raw compiler errors
+or build logs to an untrusted author.
 
 Successful warning diagnostics are stored on the document record. The compiler and Vite plugin do
 not automatically log them, so the caller controls where they are exposed.
 
 ## Manifest projections
 
-A sensitive source can only use these transforms:
+Any frontmatter source can use these transforms:
 
 ```ts
 fields: {
-  tokenPresent: { from: 'accessToken', transform: 'exists' },
-  tokenFingerprint: { from: 'accessToken', transform: 'sha256' },
+  categoryPresent: { from: 'category', transform: 'exists' },
+  categoryFingerprint: { from: 'category', transform: 'sha256' },
 }
 ```
 
 - `exists` reveals only whether the value is present and non-null.
 - `sha256` emits a deterministic, unsalted digest.
 
-Raw SHA-256 is not a password hashing function. Do not use this projection to store or verify human
-passwords; use a dedicated password KDF and authentication system in the host. A deterministic
-digest may be suitable only for a sufficiently high-entropy value when equality leakage is
-acceptable.
+Raw SHA-256 is not encryption or a password hashing function. A transform also does not hide the
+original frontmatter value from compiled modules, records, or caches. Use consumer-managed
+encryption for protected values and a dedicated password KDF and authentication system for human
+passwords.
 
 Manifest names such as `public` or `server` carry no access-control semantics. The compiler writes
 the configured file; your deployment must decide whether that path is public.
@@ -99,9 +85,9 @@ may produce a cache miss even when two objects are otherwise equivalent.
 
 ## Cache and output writes
 
-Cache records contain public frontmatter, derived data, safe projections, dependencies, diagnostics,
-and the compiled module. They do not contain plaintext sensitive fields. Highlighted output is part
-of the same record; there is no separate disk highlighter cache.
+Cache records contain complete validated frontmatter, derived data, projections, dependencies,
+diagnostics, and the compiled module. Highlighted output is part of the same record; there is no
+separate disk highlighter cache.
 
 Cache, manifests, and the three shared generated files may live in different configured directories.
 Protect those paths according to their contents instead of assuming everything is under
@@ -115,8 +101,8 @@ file rather than a partially written record.
 ## Deployment checklist
 
 - Only trusted authors can change MDX or its imports.
-- Sensitive top-level fields are listed in the configuration.
+- Protected values are encrypted before entering frontmatter or kept outside it.
 - Raw validation errors are not exposed to untrusted users.
 - No manifest containing private metadata is deployed to a public path.
 - Symlink target changes force a fresh media compilation.
-- Authentication and password storage remain outside manifest SHA-256 projections.
+- Authentication and password storage remain outside frontmatter and manifest SHA-256 projections.

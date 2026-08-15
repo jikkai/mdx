@@ -25,15 +25,14 @@ pub fn project_document(
     locale: Option<&str>,
     slug: Option<&str>,
     file: &str,
-    public: &Value,
-    sensitive: &Value,
+    frontmatter: &Value,
     derived: &Value,
 ) -> Result<Value, Vec<Diagnostic>> {
-    let mut context = public.as_object().cloned().unwrap_or_default();
+    let mut context = frontmatter.as_object().cloned().unwrap_or_default();
     context.insert("collection".into(), Value::String(collection.into()));
     context.insert("derived".into(), derived.clone());
     context.insert("file".into(), Value::String(file.into()));
-    context.insert("frontmatter".into(), public.clone());
+    context.insert("frontmatter".into(), frontmatter.clone());
     context.insert("key".into(), Value::String(key.into()));
     context.insert(
         "locale".into(),
@@ -44,10 +43,6 @@ pub fn project_document(
         slug.map_or(Value::Null, |value| Value::String(value.into())),
     );
     let context = Value::Object(context);
-    let sensitive_names = config
-        .collections
-        .get(collection)
-        .map_or(&[][..], |collection| collection.sensitive.as_slice());
     let mut projections = Map::new();
 
     for (name, manifest) in &config.manifests {
@@ -66,15 +61,7 @@ pub fn project_document(
             };
             record.insert(
                 output.clone(),
-                project_field(
-                    output,
-                    &projection,
-                    &context,
-                    sensitive,
-                    sensitive_names,
-                    file,
-                    Path::new(&config.root),
-                )?,
+                project_field(&projection, &context, file, Path::new(&config.root))?,
             );
         }
         projections.insert(name.clone(), Value::Object(record));
@@ -83,38 +70,12 @@ pub fn project_document(
 }
 
 pub fn project_field(
-    output: &str,
     projection: &Projection,
-    public: &Value,
-    sensitive: &Value,
-    sensitive_names: &[String],
+    context: &Value,
     file: &str,
     root: &Path,
 ) -> Result<Value, Vec<Diagnostic>> {
-    let sensitive_path = projection
-        .from
-        .strip_prefix("frontmatter.")
-        .unwrap_or(&projection.from);
-    let sensitive_name = sensitive_path.split('.').next().unwrap_or(sensitive_path);
-    let is_sensitive = sensitive_names.iter().any(|name| name == sensitive_name);
-    if is_sensitive
-        && !matches!(
-            projection.transform,
-            Some(ProjectionTransform::Exists | ProjectionTransform::Sha256)
-        )
-    {
-        return Err(vec![Diagnostic::error(
-            "AMAMO_MANIFEST_SENSITIVE_FIELD",
-            Some(file),
-            format!("Manifest field `{output}` cannot expose sensitive field `{sensitive_name}`"),
-        )]);
-    }
-
-    let source = if is_sensitive {
-        dotted(sensitive, sensitive_path)
-    } else {
-        dotted(public, &projection.from)
-    };
+    let source = dotted(context, &projection.from);
     match projection.transform {
         Some(ProjectionTransform::Exists) => {
             Ok(Value::Bool(source.is_some_and(|value| !value.is_null())))
@@ -327,19 +288,15 @@ mod tests {
     }
 
     #[test]
-    fn sensitive_values_only_feed_allowed_derived_fields() {
-        let public = json!({ "title": "Hello" });
-        let sensitive = json!({ "password": "secret" });
+    fn transforms_frontmatter_fields() {
+        let frontmatter = json!({ "category": "article" });
         let hash = project_field(
-            "passwordHash",
             &Projection {
                 default: None,
-                from: "password".into(),
+                from: "category".into(),
                 transform: Some(ProjectionTransform::Sha256),
             },
-            &public,
-            &sensitive,
-            &["password".into()],
+            &frontmatter,
             "/project/post.mdx",
             std::path::Path::new("/project"),
         )
@@ -347,38 +304,19 @@ mod tests {
 
         assert_eq!(
             hash,
-            json!("2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b")
+            json!("84393add8c489d33569360efd1bcb5f70ed5a22408127d241c751e5ea345eb7c")
         );
         let missing_hash = project_field(
-            "passwordHash",
             &Projection {
                 default: None,
-                from: "password".into(),
+                from: "missing".into(),
                 transform: Some(ProjectionTransform::Sha256),
             },
-            &public,
-            &json!({}),
-            &["password".into()],
+            &frontmatter,
             "/project/post.mdx",
             std::path::Path::new("/project"),
         )
         .unwrap();
         assert_eq!(missing_hash, serde_json::Value::Null);
-
-        let diagnostics = project_field(
-            "password",
-            &Projection {
-                default: None,
-                from: "password".into(),
-                transform: None,
-            },
-            &public,
-            &sensitive,
-            &["password".into()],
-            "/project/post.mdx",
-            std::path::Path::new("/project"),
-        )
-        .unwrap_err();
-        assert_eq!(diagnostics[0].code, "AMAMO_MANIFEST_SENSITIVE_FIELD");
     }
 }

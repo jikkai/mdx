@@ -85,7 +85,7 @@ interface ITransformResult {
 
 - `code` 是编译后的 JavaScript 模块体。
 - `map` 目前始终为 `null`。
-- `record.frontmatter` 不包含顶层敏感字段。
+- `record.frontmatter` 包含完整的、通过校验的 frontmatter 对象。
 - `record.derived` 包含启用的阅读时间和最后修改时间。
 - `record.hash` 是源字节的 BLAKE3 digest。
 - `record.cacheKey` 还包含配置、平台、路径和可选修改时间元数据。
@@ -141,8 +141,7 @@ interface IDiagnostic {
 ```
 
 这个类型为 `range` 和 `hint` 预留了位置，但目前不会填充它们。batch 会在第一篇失败文档或
-第一个失败阶段停止，而不会聚合全部失败。Schema 消息可能引用提交的 frontmatter 值，包括
-后来标记为 sensitive 的字段。
+第一个失败阶段停止，而不会聚合全部失败。Schema 消息可能引用提交的 frontmatter 值。
 
 ## 共享生成文件
 

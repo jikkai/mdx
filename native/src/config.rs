@@ -10,8 +10,6 @@ use crate::Diagnostic;
 #[serde(rename_all = "camelCase")]
 pub struct NativeCollectionConfig {
     pub schema: Value,
-    #[serde(default)]
-    pub sensitive: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -235,10 +233,7 @@ mod tests {
     use super::{NativeCollectionConfig, NativeMdxConfig, apply_schema_defaults_and_validate};
 
     fn collection(schema: serde_json::Value) -> NativeCollectionConfig {
-        NativeCollectionConfig {
-            schema,
-            sensitive: vec!["password".into()],
-        }
+        NativeCollectionConfig { schema }
     }
 
     #[test]

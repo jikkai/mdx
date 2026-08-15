@@ -230,10 +230,9 @@ impl PreparedBatch {
                         &document.input.file,
                         &document.parsed.body,
                         &mdx,
-                        &document.parsed.public,
+                        &document.parsed.frontmatter,
                         &document.derived,
                     )?;
-                    document.parsed.sensitive = Value::Null;
                     let mut record = DocumentRecord {
                         cached: false,
                         collection: document.input.collection,
@@ -242,7 +241,7 @@ impl PreparedBatch {
                         file: document.input.file,
                         cache_key: document.cache_key.clone(),
                         hash,
-                        frontmatter: document.parsed.public,
+                        frontmatter: document.parsed.frontmatter,
                         derived: document.derived,
                         dependencies,
                         projections: document.projections,
@@ -371,8 +370,7 @@ pub fn prepare_batch(config_json: String, inputs_json: String) -> Result<Prepare
             input.locale.as_deref(),
             input.slug.as_deref(),
             &input.file,
-            &parsed.public,
-            &parsed.sensitive,
+            &parsed.frontmatter,
             &derived,
         )
         .map_err(diagnostic_error)?;

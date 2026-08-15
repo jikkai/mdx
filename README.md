@@ -97,9 +97,10 @@ Cache and manifest paths are configured separately and are resolved from `root`.
 ## Security boundary
 
 MDX modules can execute JavaScript when the host imports or renders them. Compile only content from
-trusted authors; schema validation is not a sandbox. Mark top-level frontmatter fields as
-`sensitive` to keep their plaintext out of compiled modules, cache records, and manifests. See the
-[security model](https://jikkai.github.io/mdx/security/) before handling secrets.
+trusted authors; schema validation is not a sandbox. Frontmatter fields are ordinary data and may
+appear in compiled modules, cache records, and configured manifests. Store protected values in an
+encrypted form and decrypt them in the consumer, or keep them outside frontmatter. See the
+[security model](https://jikkai.github.io/mdx/security/) before handling protected data.
 
 ## Documentation
 
