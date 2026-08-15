@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'node:url'
 
+import { z } from '../../dist/index.js'
 import { withAmamoMdx } from '../../dist/next.js'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
@@ -9,13 +10,7 @@ export default withAmamoMdx({
   collections: {
     posts: {
       directory: 'content/posts',
-      schema: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-        },
-        required: ['title'],
-      },
+      schema: z.object({ title: z.string() }),
     },
   },
   manifests: {
