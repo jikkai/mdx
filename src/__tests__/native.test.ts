@@ -269,7 +269,7 @@ test('can disable single-dollar inline math without disabling display math', () 
 
 test('adds stable automatic heading IDs only when enabled', () => {
   const headings =
-    '## Route *Planning*\n\n## Route Planning\n\n## 路线 规划\n\n## ![Route map](https://example.com/map.png)\n'
+    '## Route *Planning*\n\n## Route Planning\n\n## 路线 规划\n\n## ![Route map](https://example.com/map.png)\n\n## API `merge` [#merge]\n\nMerge details.\n'
   const source = `---\ntitle: Extensions\n---\n<h2 id="route-planning">Manual route</h2>\n\n${headings}`
   const extensionConfig = normalizeConfig({
     ...sourceConfig,
@@ -278,20 +278,40 @@ test('adds stable automatic heading IDs only when enabled', () => {
       extensions: { headingIds: true },
     },
   })
-  const module = prepareNativeBatch(extensionConfig, [
-    {
-      collection: 'posts',
-      file: '/project/content/posts/extensions.mdx',
-      key: 'extensions',
-      source,
-    },
-  ]).finish([])[0]?.module
+  const module =
+    prepareNativeBatch(extensionConfig, [
+      {
+        collection: 'posts',
+        file: '/project/content/posts/extensions.mdx',
+        key: 'extensions',
+        source,
+      },
+    ]).finish([])[0]?.module ?? ''
 
-  assert.match(module ?? '', /id: "route-planning"/)
-  assert.match(module ?? '', /id: "route-planning-2"/)
-  assert.match(module ?? '', /id: "route-planning-3"/)
-  assert.match(module ?? '', /id: "路线-规划"/)
-  assert.match(module ?? '', /id: "route-map"/)
+  assert.match(module, /id: "route-planning"/)
+  assert.match(module, /id: "route-planning-1"/)
+  assert.match(module, /id: "路线-规划"/)
+  assert.match(module, /id: ""/)
+  assert.match(module, /id: "merge"/)
+  assert.doesNotMatch(module, /\[#merge]/)
+  assert.match(module, /export const toc = \[/)
+  assert.match(module, /"url": "#route-planning-1"/)
+  assert.match(module, /"url": "#merge"/)
+  assert.match(module, /"title": _jsxs\(_Fragment/)
+  assert.match(module, /_jsx\("code",/)
+
+  const prefix = 'export const structuredData = '
+  const structuredDataExport = module.split('\n').find((line) => line.startsWith(prefix))
+  assert.ok(structuredDataExport)
+  const structuredData = JSON.parse(structuredDataExport.slice(prefix.length, -1)) as {
+    contents: Array<{ content: string; heading?: string }>
+    headings: Array<{ content: string; id: string }>
+  }
+  assert.deepEqual(structuredData.contents.at(-1), {
+    content: 'Merge details.',
+    heading: 'merge',
+  })
+  assert.deepEqual(structuredData.headings.at(-1), { content: 'API `merge`', id: 'merge' })
 
   const disabledModule = prepareNativeBatch(
     normalizeConfig({ ...sourceConfig, highlight: false }),

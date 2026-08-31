@@ -36,6 +36,37 @@ test('uses official Shiki dual-theme HAST', async () => {
   }
 })
 
+test('applies the documentation code annotation semantics', async () => {
+  const renderer = await createShikiRenderer(config)
+  try {
+    const result = await renderer.highlight([
+      {
+        blockId: 0,
+        code: [
+          'const target = true // [!code ++]',
+          'const focus = true // [!code focus]',
+          'const broken = true // [!code error]',
+          'const marked = true // [!code word:marked]',
+        ].join('\n'),
+        documentId: 'posts/a',
+        lang: 'ts',
+        meta: '{1} /target/',
+      },
+    ])
+    const hast = JSON.stringify(result[0]?.hast)
+
+    assert.match(hast, /language-ts/)
+    assert.match(hast, /line-highlighted/)
+    assert.match(hast, /line-diff-add/)
+    assert.match(hast, /line-focused/)
+    assert.match(hast, /line-error/)
+    assert.match(hast, /word-highlighted/)
+    assert.match(hast, /has-word-highlighted/)
+  } finally {
+    renderer.dispose()
+  }
+})
+
 test('unknown language behavior is configurable', async () => {
   const strict = await createShikiRenderer(config)
   await assert.rejects(

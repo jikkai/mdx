@@ -1,5 +1,6 @@
 mod cache;
 mod config;
+mod content;
 mod document;
 mod hast;
 mod manifest;

@@ -16,6 +16,12 @@ export type {
   ManifestField,
 } from './config.js'
 export { defineConfig, normalizeConfig, z } from './config.js'
+export type {
+  IStructuredData,
+  IStructuredDataContent,
+  IStructuredDataHeading,
+  ITocItem,
+} from './content.js'
 export type { IBuildResult, ICompiler, ITransformResult } from './compiler.js'
 export { createCompiler } from './compiler.js'
 export type { IDiagnostic } from './native.js'

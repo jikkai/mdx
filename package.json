@@ -55,6 +55,7 @@
     "release": "verso"
   },
   "dependencies": {
+    "@shikijs/transformers": "4.4.3",
     "shiki": "4.4.3",
     "zod": "4.5.4"
   },

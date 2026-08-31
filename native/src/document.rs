@@ -1,10 +1,11 @@
 use std::path::{Path, PathBuf};
 
 use serde_json::{Map, Value};
-use swc_core::common::DUMMY_SP;
+use swc_core::common::{DUMMY_SP, SyntaxContext};
 use swc_core::ecma::ast::{
-    Expr, JSXAttr, JSXAttrName, JSXAttrValue, JSXExpr, JSXExprContainer, KeyValueProp, Lit,
-    ObjectLit, Prop, PropName, PropOrSpread, Str,
+    ArrayLit, BindingIdent, Decl, ExportDecl, Expr, ExprOrSpread, Ident, JSXAttr, JSXAttrName,
+    JSXAttrValue, JSXExpr, JSXExprContainer, KeyValueProp, Lit, ModuleDecl, ModuleItem, Number,
+    ObjectLit, Pat, Prop, PropName, PropOrSpread, Stmt, Str, VarDecl, VarDeclKind, VarDeclarator,
 };
 use swc_core::ecma::visit::{VisitMut, VisitMutWith};
 
@@ -12,6 +13,7 @@ use crate::Diagnostic;
 use crate::config::{
     NativeCollectionConfig, NativeMdxConfig, NativeMediaConfig, apply_schema_defaults_and_validate,
 };
+use crate::content::{TocItem, apply_heading_ids, prepare_content};
 use crate::hast::{remove_table_line_breaks, rewrite_document_anchors, rewrite_media};
 use crate::math::replace_math;
 
@@ -31,7 +33,9 @@ pub struct PreparedMdx {
     pub dependencies: Vec<PathBuf>,
     pub diagnostics: Vec<Diagnostic>,
     pub reading_words: usize,
+    structured_data: crate::content::StructuredData,
     synthetic_jsx_spans: Vec<swc_core::common::Span>,
+    toc: Vec<TocItem>,
     pub(crate) tree: mdxjs::hast::Node,
 }
 
@@ -88,6 +92,7 @@ pub fn prepare_mdx(
     let options = mdx_options(file, config);
     let mut mdast = mdxjs::mdast_util_from_mdx(body, &options)
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
+    let content = prepare_content(&mut mdast, config.extensions.heading_ids);
     let reading_words = reading_units(&mdast);
     let mut code_blocks = Vec::new();
     if highlight {
@@ -97,17 +102,20 @@ pub fn prepare_mdx(
         apply_hard_breaks(&mut mdast);
     }
     let mut tree = mdxjs::mdast_util_to_hast(&mdast);
-    rewrite_document_anchors(&mut tree, document_id, config.extensions.heading_ids);
+    rewrite_document_anchors(&mut tree, document_id);
     replace_math(&mut tree, file, &config.math)?;
     remove_table_line_breaks(&mut tree);
     let media = rewrite_media(&mut tree, root, Path::new(file), media)?;
+    let toc = apply_heading_ids(&mut tree, &content.headings);
 
     Ok(PreparedMdx {
         code_blocks,
         dependencies: media.dependencies,
         diagnostics: media.diagnostics,
         reading_words,
+        structured_data: content.structured_data,
         synthetic_jsx_spans: media.synthetic_jsx_spans,
+        toc,
         tree,
     })
 }
@@ -197,9 +205,17 @@ pub fn finish_mdx(
         &mut explicit_jsxs,
     )
     .map_err(|error| vec![mdx_diagnostic(file, error)])?;
-    for span in prepared.synthetic_jsx_spans {
-        explicit_jsxs.remove(&span);
+    for span in &prepared.synthetic_jsx_spans {
+        explicit_jsxs.remove(span);
     }
+    append_toc_export(
+        &mut program.module.body,
+        &mut program.comments,
+        &prepared.toc,
+        file,
+        &options,
+        &location,
+    )?;
     program.module.visit_mut_with(&mut ReactStyleProperties);
     mdxjs::mdx_plugin_recma_document(&mut program, &options, Some(&location))
         .map_err(|error| vec![mdx_diagnostic(file, error)])?;
@@ -209,6 +225,11 @@ pub fn finish_mdx(
     let mut module = program.serialize();
     module.push_str("export const frontmatter = ");
     module.push_str(&serde_json::to_string(frontmatter).expect("JSON values serialize"));
+    module.push_str(";\n");
+    module.push_str("export const structuredData = ");
+    module.push_str(
+        &serde_json::to_string(&prepared.structured_data).expect("structured data serializes"),
+    );
     module.push_str(";\n");
     if let Some(values) = derived.as_object() {
         for (name, value) in values {
@@ -220,6 +241,103 @@ pub fn finish_mdx(
         }
     }
     Ok(module)
+}
+
+fn append_toc_export(
+    body: &mut Vec<ModuleItem>,
+    comments: &mut Vec<swc_core::common::comments::Comment>,
+    toc: &[TocItem],
+    file: &str,
+    options: &mdxjs::Options,
+    location: &markdown::Location,
+) -> Result<(), Vec<Diagnostic>> {
+    let items = toc
+        .iter()
+        .map(|item| {
+            let root = mdxjs::hast::Node::Root(mdxjs::hast::Root {
+                children: item.title.clone(),
+                position: None,
+            });
+            let mut title_explicit_jsxs = Default::default();
+            let mut title =
+                mdxjs::hast_util_to_swc(&root, options, Some(location), &mut title_explicit_jsxs)
+                    .map_err(|error| vec![mdx_diagnostic(file, error)])?;
+            comments.append(&mut title.comments);
+            let title = match title.module.body.pop() {
+                Some(ModuleItem::Stmt(Stmt::Expr(expression))) => expression.expr,
+                _ => Box::new(Expr::Lit(Lit::Str(Str {
+                    raw: None,
+                    span: DUMMY_SP,
+                    value: String::new().into(),
+                }))),
+            };
+            Ok(Some(ExprOrSpread {
+                expr: Box::new(Expr::Object(ObjectLit {
+                    props: vec![
+                        object_property(
+                            "depth",
+                            Expr::Lit(Lit::Num(Number {
+                                raw: None,
+                                span: DUMMY_SP,
+                                value: f64::from(item.depth),
+                            })),
+                        ),
+                        object_property(
+                            "url",
+                            Expr::Lit(Lit::Str(Str {
+                                raw: None,
+                                span: DUMMY_SP,
+                                value: item.url.clone().into(),
+                            })),
+                        ),
+                        object_property("title", *title),
+                    ],
+                    span: DUMMY_SP,
+                })),
+                spread: None,
+            }))
+        })
+        .collect::<Result<Vec<_>, Vec<Diagnostic>>>()?;
+    body.push(export_const(
+        "toc",
+        Expr::Array(ArrayLit {
+            elems: items,
+            span: DUMMY_SP,
+        }),
+    ));
+    Ok(())
+}
+
+fn object_property(name: &str, value: Expr) -> PropOrSpread {
+    PropOrSpread::Prop(Box::new(Prop::KeyValue(KeyValueProp {
+        key: PropName::Str(Str {
+            raw: None,
+            span: DUMMY_SP,
+            value: name.into(),
+        }),
+        value: Box::new(value),
+    })))
+}
+
+fn export_const(name: &str, value: Expr) -> ModuleItem {
+    ModuleItem::ModuleDecl(ModuleDecl::ExportDecl(ExportDecl {
+        decl: Decl::Var(Box::new(VarDecl {
+            ctxt: SyntaxContext::empty(),
+            declare: false,
+            decls: vec![VarDeclarator {
+                definite: false,
+                init: Some(Box::new(value)),
+                name: Pat::Ident(BindingIdent {
+                    id: Ident::new_no_ctxt(name.into(), DUMMY_SP),
+                    type_ann: None,
+                }),
+                span: DUMMY_SP,
+            }],
+            kind: VarDeclKind::Const,
+            span: DUMMY_SP,
+        })),
+        span: DUMMY_SP,
+    }))
 }
 
 struct ReactStyleProperties;

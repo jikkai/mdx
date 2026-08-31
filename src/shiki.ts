@@ -1,3 +1,15 @@
+import type { ShikiTransformer } from 'shiki/core'
+import {
+  transformerMetaHighlight,
+  transformerMetaWordHighlight,
+  transformerNotationDiff,
+  transformerNotationErrorLevel,
+  transformerNotationFocus,
+  transformerNotationHighlight,
+  transformerNotationWordHighlight,
+  transformerRemoveLineBreak,
+  transformerRemoveNotationEscape,
+} from '@shikijs/transformers'
 import { createHighlighterCore } from 'shiki/core'
 import { createJavaScriptRegexEngine } from 'shiki/engine/javascript'
 import { createOnigurumaEngine } from 'shiki/engine/oniguruma'
@@ -10,6 +22,16 @@ import type { ICodeBlock, IHighlightedCodeBlock } from './native.js'
 export interface IShikiRenderer {
   dispose(): void
   highlight(blocks: ICodeBlock[]): Promise<IHighlightedCodeBlock[]>
+}
+
+function languageClassTransformer(language: string): ShikiTransformer {
+  return {
+    pre(node) {
+      const classes = String(node.properties.class ?? '').split(' ')
+      classes.push(`language-${language}`)
+      node.properties.class = classes.filter(Boolean).join(' ')
+    },
+  }
 }
 
 function themeLoader(name: string) {
@@ -96,18 +118,32 @@ export async function createShikiRenderer(
             light: config.themes.light,
             dark: config.themes.dark,
           },
-          transformers:
-            language && !['text', 'plain', 'plaintext'].includes(language)
-              ? [
-                  {
-                    pre(node) {
-                      const classes = String(node.properties.class ?? '').split(' ')
-                      classes.push(`language-${language}`)
-                      node.properties.class = classes.filter(Boolean).join(' ')
-                    },
-                  },
-                ]
-              : undefined,
+          transformers: [
+            ...(language && !['text', 'plain', 'plaintext'].includes(language)
+              ? [languageClassTransformer(language)]
+              : []),
+            transformerMetaHighlight({ className: 'line-highlighted' }),
+            transformerMetaWordHighlight({ className: 'word-highlighted' }),
+            transformerNotationHighlight({ classActiveLine: 'line-highlighted' }),
+            transformerNotationDiff({
+              classLineAdd: 'line-diff-add',
+              classLineRemove: 'line-diff-remove',
+            }),
+            transformerNotationFocus({ classActiveLine: 'line-focused' }),
+            transformerNotationErrorLevel({
+              classMap: {
+                error: ['line-highlighted', 'line-error'],
+                warning: ['line-highlighted', 'line-warning'],
+                info: ['line-highlighted', 'line-info'],
+              },
+            }),
+            transformerNotationWordHighlight({
+              classActiveWord: 'word-highlighted',
+              classActivePre: 'has-word-highlighted',
+            }),
+            transformerRemoveLineBreak(),
+            transformerRemoveNotationEscape(),
+          ],
         })
         highlighted.set(key, JSON.parse(JSON.stringify(hast)) as JsonValue)
       }

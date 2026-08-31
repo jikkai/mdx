@@ -108,7 +108,7 @@ const shikiVersion = (require('shiki/package.json') as { version: string }).vers
 function nativeConfigJson(config: IAmamoMDXConfig): string {
   return JSON.stringify({
     ...config,
-    _runtime: { packageVersion, shikiVersion },
+    _runtime: { packageVersion, shikiTransformers: true, shikiVersion },
   })
 }
 

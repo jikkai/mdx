@@ -109,6 +109,9 @@ importers:
 
   .:
     dependencies:
+      '@shikijs/transformers':
+        specifier: 4.4.3
+        version: 4.4.3
       shiki:
         specifier: 4.4.3
         version: 4.4.3
@@ -168,8 +171,8 @@ importers:
   apps/docs:
     dependencies:
       '@amamo/doctrine':
-        specifier: 0.3.1
-        version: 0.3.1(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)
+        specifier: 0.4.0
+        version: 0.4.0(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -201,8 +204,8 @@ importers:
 
 packages:
 
-  '@amamo/doctrine@0.3.1':
-    resolution: {integrity: sha512-BRZu05+OgmfMWOLe8s6s6HwOL2LJReSI/EcB1Q2b0q2y7wVd2qMIdrP5ZGo4x/BT0+osRXQWNOJxh/3UmL3lBA==}
+  '@amamo/doctrine@0.4.0':
+    resolution: {integrity: sha512-+/mNh+Jgm87CZG8Jdtdiiip7Flv3ruf0uhyT31uV+MDzZ58rodNYTapWNmUXiyLzKb7XztWEd8xP9UlIz5kbTw==}
     engines: {node: '>=20.19'}
     hasBin: true
 
@@ -1602,6 +1605,10 @@ packages:
     resolution: {integrity: sha512-w8UHjeUnIR965KMWJHUPXOc2mNJUnK3vpVLYLvw5IYU2mnTTJ89E24OrJDBNiJDQ0qzb0tc4l7mrIXx5cFeIyw==}
     engines: {node: '>=20'}
 
+  '@shikijs/transformers@4.4.3':
+    resolution: {integrity: sha512-oJSARV6NaWd+rnNJbtnpAdj3Zg0ZVyzsnMgb3vi3HA+35y8lBWUCpOnWsmyiXZIikY+x1BDqrQUgmxfzWh7Jvw==}
+    engines: {node: '>=20'}
+
   '@shikijs/types@4.4.3':
     resolution: {integrity: sha512-UEJxmRR++MAGR6hugn0vgVS2W/6lWAts84FFSrnlH9sP0LNol7E5+NQ792pH8liWUhyMyjhTgSUH3k7iD7tc5g==}
     engines: {node: '>=20'}
@@ -2607,7 +2614,7 @@ packages:
 
 snapshots:
 
-  '@amamo/doctrine@0.3.1(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)':
+  '@amamo/doctrine@0.4.0(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)':
     dependencies:
       '@amamo/mdx': 0.4.0(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
       '@base-ui/react': 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -3609,6 +3616,11 @@ snapshots:
 
   '@shikijs/themes@4.4.3':
     dependencies:
+      '@shikijs/types': 4.4.3
+
+  '@shikijs/transformers@4.4.3':
+    dependencies:
+      '@shikijs/core': 4.4.3
       '@shikijs/types': 4.4.3
 
   '@shikijs/types@4.4.3':

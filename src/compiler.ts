@@ -528,13 +528,20 @@ function generateCollectionModule(config: IAmamoMDXConfig, records: IDocumentMet
 }
 
 function generateCollectionTypes(): string {
-  return `export interface IGeneratedDocument {
+  return `import type { IStructuredData, ITocItem } from '@amamo/mdx'
+
+export interface IGeneratedDocument {
   readonly derived: Readonly<Record<string, unknown>>
   readonly frontmatter: Readonly<Record<string, unknown>>
   readonly key: string
   readonly locale?: string
   readonly slug?: string
-  readonly load: () => Promise<{ default: unknown }>
+  readonly load: () => Promise<{
+    readonly default: unknown
+    readonly frontmatter: Readonly<Record<string, unknown>>
+    readonly structuredData: IStructuredData
+    readonly toc: readonly ITocItem[]
+  }>
 }
 
 export declare const collections: Readonly<Record<string, readonly IGeneratedDocument[]>>

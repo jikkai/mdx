@@ -24,6 +24,7 @@ serde = { version = "=1.0.224", features = ["derive"] }
 serde_json = "1.0.145"
 sha2 = "0.10.9"
 swc_core = { version = "27.0.6", features = ["common", "ecma_ast", "ecma_visit"] }
+unicode-general-category = "1.1.0"
 yaml_serde = "0.10.4"
 
 [build-dependencies]
