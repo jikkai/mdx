@@ -86,7 +86,8 @@ export async function createShikiRenderer(
         `AMAMO_SHIKI_UNKNOWN_LANGUAGE: Unknown bundled Shiki language \`${requested}\``,
       )
     }
-    const promise = highlighter.loadLanguage(loader).then(() => requested)
+    const dependency = requested === 'mdx' ? loadLanguage('tsx') : Promise.resolve()
+    const promise = dependency.then(() => highlighter.loadLanguage(loader)).then(() => requested)
     loading.set(requested, promise)
     return promise
   }

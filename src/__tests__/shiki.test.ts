@@ -36,6 +36,29 @@ test('uses official Shiki dual-theme HAST', async () => {
   }
 })
 
+test('highlights embedded JSX in MDX code', async () => {
+  const renderer = await createShikiRenderer(config)
+  try {
+    const result = await renderer.highlight([
+      {
+        blockId: 0,
+        code: '<Callout variant="tip">Rendered during the build.</Callout>',
+        documentId: 'posts/a',
+        lang: 'mdx',
+        meta: null,
+      },
+    ])
+    const hast = JSON.stringify(result[0]?.hast)
+    const tokenColors = new Set(
+      [...hast.matchAll(/"style":"color:([^;"]+)/g)].map((match) => match[1]),
+    )
+
+    assert.ok(tokenColors.size > 1)
+  } finally {
+    renderer.dispose()
+  }
+})
+
 test('applies the documentation code annotation semantics', async () => {
   const renderer = await createShikiRenderer(config)
   try {
