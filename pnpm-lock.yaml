@@ -171,8 +171,8 @@ importers:
   apps/docs:
     dependencies:
       '@amamo/doctrine':
-        specifier: 0.4.0
-        version: 0.4.0(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)
+        specifier: 0.5.0
+        version: 0.5.0(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)
       '@base-ui/react':
         specifier: 1.7.0
         version: 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -204,59 +204,59 @@ importers:
 
 packages:
 
-  '@amamo/doctrine@0.4.0':
-    resolution: {integrity: sha512-+/mNh+Jgm87CZG8Jdtdiiip7Flv3ruf0uhyT31uV+MDzZ58rodNYTapWNmUXiyLzKb7XztWEd8xP9UlIz5kbTw==}
+  '@amamo/doctrine@0.5.0':
+    resolution: {integrity: sha512-446krccrkGSfggFkoagyLRrgSa2/ul3+G3QVr0A4HnwIVJRkgfoqoRDHa7ACd+kuQjqouYpTo0ZNGa3MqMtltQ==}
     engines: {node: '>=20.19'}
     hasBin: true
 
-  '@amamo/mdx-darwin-arm64@0.4.0':
-    resolution: {integrity: sha512-FzeWQ1CWWPiZbwI+NKrEVVoNphp5IWQDyuhhs2tzM97uUmMl0hapUB7P8gXpDM5piKCiXrvHTlPZ1wqqJAg92w==}
+  '@amamo/mdx-darwin-arm64@0.5.2':
+    resolution: {integrity: sha512-KDT02Dxgy7oBHlgB6nksjbYSwNAtbrMWMdJeVPcsjujjVBs9Lc67taACxeq/FDGKpQtZHJBoGuEMfUSKTldrHA==}
     engines: {node: '>=20.19'}
     cpu: [arm64]
     os: [darwin]
 
-  '@amamo/mdx-darwin-x64@0.4.0':
-    resolution: {integrity: sha512-zSQIt6yFRAkRuEWZB8YMgIUolifI1tg26w3pmGRO6Fb1jJNBth2Qmfz907SUlEuQbcrTWVvKrKoocDUHT/faCA==}
+  '@amamo/mdx-darwin-x64@0.5.2':
+    resolution: {integrity: sha512-SOWVktqnwgMjcMCmtAHUAAzfW4oPMJMdbKkfcSaExW6vpkbaUGiDvuYwSBMVicA7MATzRmiJ85U6i7egGjH2CQ==}
     engines: {node: '>=20.19'}
     cpu: [x64]
     os: [darwin]
 
-  '@amamo/mdx-linux-arm64-gnu@0.4.0':
-    resolution: {integrity: sha512-VUSStBfgLlqZD4ra5CozgsUPeKYwotd0qZxTDdUhXO30+91dYblqLuMQRJTxyHLyF/cpA0B1pdnjd3QR1UNS6Q==}
+  '@amamo/mdx-linux-arm64-gnu@0.5.2':
+    resolution: {integrity: sha512-9jbWKZt6iaUr6LDAi545lV1/2c+WzpzUucGwot9hfl3fKjZALK8p5Ami6/OWONPt15pCf8wJz9/50o1H1kQs/g==}
     engines: {node: '>=20.19'}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
 
-  '@amamo/mdx-linux-arm64-musl@0.4.0':
-    resolution: {integrity: sha512-tzVzc7n8la24wXR1CJ68B5IlpNwO7CmZOUU/XnVCTssQqM2gUI5efvOD1NpRrZ2ld0NSCISbZRUmIQNOu5vnsw==}
+  '@amamo/mdx-linux-arm64-musl@0.5.2':
+    resolution: {integrity: sha512-Nk5qet9U01t65wfwH0M7Z1RVCFs+BP7eu2zENHj77msCWJTiYXLlDHOL33tXk+OP86DgtWk+7fMe97l17QnkXQ==}
     engines: {node: '>=20.19'}
     cpu: [arm64]
     os: [linux]
     libc: [musl]
 
-  '@amamo/mdx-linux-x64-gnu@0.4.0':
-    resolution: {integrity: sha512-le+sR8JPYMBZjh6/TkYFVefYB6Ip/MyhjEcmHfXHoG2cFeXoxEYXGMOw0MLGSS//DaIG6XbJ8ooyr+8SK+2aTg==}
+  '@amamo/mdx-linux-x64-gnu@0.5.2':
+    resolution: {integrity: sha512-JQ3eA1fhzWZjUGroPVatJF4rDGOfH+6FdKsqS/pycqWbxrf68n6OW9D2B98klGaXCNvGJssF6mg5V7rbsBeMrw==}
     engines: {node: '>=20.19'}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
 
-  '@amamo/mdx-linux-x64-musl@0.4.0':
-    resolution: {integrity: sha512-h602Q6C85ZFc0Ti/uWHqOMmsawhoFQXq1F+7BxRoABL4oLZZ/Hx1HSewuuuO8LNkTkzf9NGh5JWypNbHcol+Jw==}
+  '@amamo/mdx-linux-x64-musl@0.5.2':
+    resolution: {integrity: sha512-sT2k+kndOOr2RtJ7J/N7w4jvZI7KtHsErSGBhEgDgvldTF4qGq/kRW7jGHntVc3is0d40+gyM/mGN3f8mffthw==}
     engines: {node: '>=20.19'}
     cpu: [x64]
     os: [linux]
     libc: [musl]
 
-  '@amamo/mdx-win32-x64-msvc@0.4.0':
-    resolution: {integrity: sha512-CjGOLpxH7u6MyjqWl8gXlzIAvpljEfuJkdPssLi1TdQY1BOtTTH1qWMggTr9VsoSbIJWcSjMzRx/Qy6Lf7tyOA==}
+  '@amamo/mdx-win32-x64-msvc@0.5.2':
+    resolution: {integrity: sha512-ZnsBRJgpLSbOKCueRz6LIeNYPY/HK932Ho5H7K5may9fsS1pxQio6qi7JFFaoQB3YAp14Kl4BCdN+RksQJrW0Q==}
     engines: {node: '>=20.19'}
     cpu: [x64]
     os: [win32]
 
-  '@amamo/mdx@0.4.0':
-    resolution: {integrity: sha512-Dal5kFi4LJi3e6KDc+kzaJWM7mGUahEgH/BYTl3UMCkfhjHqIR/+WNpP18Lsi3jJlb30d/Lt+JhclvOdbU8VLw==}
+  '@amamo/mdx@0.5.2':
+    resolution: {integrity: sha512-qqWPS2lcIg5d79sFuNrTHAlPZ7CQ304F7NgcN4n/uSD3KVHUP18oJ4IDHOHW5uQlhVe0UFY2ieJJ6rY2ue8kzA==}
     engines: {node: '>=20.19'}
     peerDependencies:
       next: ^16.0.0
@@ -408,6 +408,11 @@ packages:
 
   '@fontsource-variable/jetbrains-mono@5.3.0':
     resolution: {integrity: sha512-F32xpS2NsGYoQi2ADSkKTgpJj7ozajsGgDJ8woTnqjmIB+dxDIqImjl4pXZVEExu8UFZ2ndhmX18EBS/hdz3Lw==}
+
+  '@icons-pack/react-simple-icons@13.15.1':
+    resolution: {integrity: sha512-S35E7vJlJzMeoqjwwI7ZmQUJ2W+2KspnB6bc49KdoDGwp5mCgAy9L3sscfWMewQSMgBdPU8KWWwpSGq5DJyAFw==}
+    peerDependencies:
+      react: ^16.13 || ^17 || ^18 || ^19
 
   '@img/colour@1.1.0':
     resolution: {integrity: sha512-Td76q7j57o/tLVdgS746cYARfSyxk8iEfRxewL9h4OMzYhbW4TAcppl0mT4eyqXddh6L/jwoM75mo7ixa/pCeQ==}
@@ -2614,12 +2619,13 @@ packages:
 
 snapshots:
 
-  '@amamo/doctrine@0.4.0(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)':
+  '@amamo/doctrine@0.5.0(@types/node@26.4.0)(@types/react@19.2.18)(jiti@2.7.0)(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(yaml@2.9.0)':
     dependencies:
-      '@amamo/mdx': 0.4.0(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
+      '@amamo/mdx': 0.5.2(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
       '@base-ui/react': 1.7.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@fontsource-variable/inter': 5.3.0
       '@fontsource-variable/jetbrains-mono': 5.3.0
+      '@icons-pack/react-simple-icons': 13.15.1(react@19.2.8)
       '@tailwindcss/vite': 4.3.3(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
       '@vitejs/plugin-react': 6.1.1(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))
       lucide-react: 1.37.0(react@19.2.8)
@@ -2648,39 +2654,40 @@ snapshots:
       - tsx
       - yaml
 
-  '@amamo/mdx-darwin-arm64@0.4.0':
+  '@amamo/mdx-darwin-arm64@0.5.2':
     optional: true
 
-  '@amamo/mdx-darwin-x64@0.4.0':
+  '@amamo/mdx-darwin-x64@0.5.2':
     optional: true
 
-  '@amamo/mdx-linux-arm64-gnu@0.4.0':
+  '@amamo/mdx-linux-arm64-gnu@0.5.2':
     optional: true
 
-  '@amamo/mdx-linux-arm64-musl@0.4.0':
+  '@amamo/mdx-linux-arm64-musl@0.5.2':
     optional: true
 
-  '@amamo/mdx-linux-x64-gnu@0.4.0':
+  '@amamo/mdx-linux-x64-gnu@0.5.2':
     optional: true
 
-  '@amamo/mdx-linux-x64-musl@0.4.0':
+  '@amamo/mdx-linux-x64-musl@0.5.2':
     optional: true
 
-  '@amamo/mdx-win32-x64-msvc@0.4.0':
+  '@amamo/mdx-win32-x64-msvc@0.5.2':
     optional: true
 
-  '@amamo/mdx@0.4.0(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
+  '@amamo/mdx@0.5.2(next@16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react@19.2.8)(vite@8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0))':
     dependencies:
+      '@shikijs/transformers': 4.4.3
       shiki: 4.4.3
       zod: 4.5.4
     optionalDependencies:
-      '@amamo/mdx-darwin-arm64': 0.4.0
-      '@amamo/mdx-darwin-x64': 0.4.0
-      '@amamo/mdx-linux-arm64-gnu': 0.4.0
-      '@amamo/mdx-linux-arm64-musl': 0.4.0
-      '@amamo/mdx-linux-x64-gnu': 0.4.0
-      '@amamo/mdx-linux-x64-musl': 0.4.0
-      '@amamo/mdx-win32-x64-msvc': 0.4.0
+      '@amamo/mdx-darwin-arm64': 0.5.2
+      '@amamo/mdx-darwin-x64': 0.5.2
+      '@amamo/mdx-linux-arm64-gnu': 0.5.2
+      '@amamo/mdx-linux-arm64-musl': 0.5.2
+      '@amamo/mdx-linux-x64-gnu': 0.5.2
+      '@amamo/mdx-linux-x64-musl': 0.5.2
+      '@amamo/mdx-win32-x64-msvc': 0.5.2
       next: 16.3.3(@types/node@26.4.0)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       react: 19.2.8
       vite: 8.2.2(@types/node@26.4.0)(jiti@2.7.0)(yaml@2.9.0)
@@ -2796,6 +2803,10 @@ snapshots:
   '@fontsource-variable/inter@5.3.0': {}
 
   '@fontsource-variable/jetbrains-mono@5.3.0': {}
+
+  '@icons-pack/react-simple-icons@13.15.1(react@19.2.8)':
+    dependencies:
+      react: 19.2.8
 
   '@img/colour@1.1.0':
     optional: true
