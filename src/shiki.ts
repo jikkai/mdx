@@ -27,9 +27,15 @@ export interface IShikiRenderer {
 function languageClassTransformer(language: string): ShikiTransformer {
   return {
     pre(node) {
-      const classes = String(node.properties.class ?? '').split(' ')
-      classes.push(`language-${language}`)
-      node.properties.class = classes.filter(Boolean).join(' ')
+      this.addClassToHast(node, `language-${language}`)
+    },
+  }
+}
+
+function metadataTransformer(metadata: string | null): ShikiTransformer {
+  return {
+    pre(node) {
+      if (metadata) node.properties['data-meta'] = metadata
     },
   }
 }
@@ -122,6 +128,7 @@ export async function createShikiRenderer(
             ...(language && !['text', 'plain', 'plaintext'].includes(language)
               ? [languageClassTransformer(language)]
               : []),
+            metadataTransformer(block.meta),
             transformerMetaHighlight({ className: 'line-highlighted' }),
             transformerMetaWordHighlight({ className: 'word-highlighted' }),
             transformerNotationHighlight({ classActiveLine: 'line-highlighted' }),

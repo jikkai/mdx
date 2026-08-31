@@ -50,18 +50,20 @@ test('applies the documentation code annotation semantics', async () => {
         ].join('\n'),
         documentId: 'posts/a',
         lang: 'ts',
-        meta: '{1} /target/',
+        meta: '{1} /target/ filename="doctrine.config.ts"',
       },
     ])
     const hast = JSON.stringify(result[0]?.hast)
 
     assert.match(hast, /language-ts/)
+    assert.doesNotMatch(hast, /shiki,shiki-themes/)
     assert.match(hast, /line-highlighted/)
     assert.match(hast, /line-diff-add/)
     assert.match(hast, /line-focused/)
     assert.match(hast, /line-error/)
     assert.match(hast, /word-highlighted/)
     assert.match(hast, /has-word-highlighted/)
+    assert.match(hast, /data-meta.*filename.*doctrine\.config\.ts/)
   } finally {
     renderer.dispose()
   }
