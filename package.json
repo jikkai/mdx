@@ -56,25 +56,25 @@
   },
   "dependencies": {
     "shiki": "4.4.3",
-    "zod": "4.4.3"
+    "zod": "4.5.4"
   },
   "devDependencies": {
     "@amamo/oxlint-config": "1.1.0",
-    "@amamo/verso": "1.1.0",
+    "@amamo/verso": "1.2.0",
     "@napi-rs/cli": "3.8.6",
-    "@types/node": "26.2.0",
+    "@types/node": "26.4.0",
     "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "lint-staged": "17.3.0",
-    "next": "16.3.1",
-    "oxfmt": "0.63.0",
-    "oxlint": "1.78.0",
+    "@types/react-dom": "19.2.5",
+    "lint-staged": "17.4.1",
+    "next": "16.3.3",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "simple-git-hooks": "2.13.1",
+    "simple-git-hooks": "2.14.0",
     "typescript": "7.0.2",
-    "vite": "8.2.1",
-    "vitest": "4.1.10"
+    "vite": "8.2.2",
+    "vitest": "4.1.11"
   },
   "peerDependencies": {
     "next": "^16.0.0",
@@ -117,5 +117,5 @@
   "engines": {
     "node": ">=20.19"
   },
-  "packageManager": "pnpm@11.20.0"
+  "packageManager": "pnpm@12.1.0"
 }

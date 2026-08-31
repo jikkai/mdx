@@ -104,7 +104,6 @@ pub fn write(directory: &Path, key: &str, value: &Value) -> Result<bool, Vec<Dia
         .open(&temporary)
         .map_err(|error| io_diagnostic("AMAMO_CACHE_WRITE", &temporary, error))?;
     file.write_all(&bytes)
-        .and_then(|()| file.sync_all())
         .map_err(|error| io_diagnostic("AMAMO_CACHE_WRITE", &temporary, error))?;
     drop(file);
     if let Err(error) = fs::rename(&temporary, &path) {

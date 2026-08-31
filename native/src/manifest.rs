@@ -2,14 +2,21 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::path::Path;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 
+use crate::Diagnostic;
 use crate::config::{ManifestField, NativeConfig, NativeManifestConfig, SortDirection};
 pub use crate::config::{Projection, ProjectionTransform};
 use crate::hast::normalize_path;
-use crate::{Diagnostic, DocumentRecord};
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManifestRecord {
+    pub key: String,
+    pub projections: Value,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -105,7 +112,7 @@ pub fn project_field(
 
 pub fn render_manifests(
     config: &NativeConfig,
-    records: &[DocumentRecord],
+    records: &[ManifestRecord],
 ) -> Result<Vec<RenderedManifest>, Vec<Diagnostic>> {
     config
         .manifests
@@ -117,7 +124,7 @@ pub fn render_manifests(
 fn render_manifest(
     name: &str,
     manifest: &NativeManifestConfig,
-    records: &[DocumentRecord],
+    records: &[ManifestRecord],
 ) -> Result<RenderedManifest, Vec<Diagnostic>> {
     let mut entries = records
         .iter()

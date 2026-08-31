@@ -47,7 +47,7 @@ export interface IHighlightedCodeBlock {
   hast: JsonValue
 }
 
-export interface IDocumentRecord {
+export interface IDocumentMetadata {
   cacheKey: string
   cached: boolean
   collection: string
@@ -59,9 +59,13 @@ export interface IDocumentRecord {
   hash: string
   key: string
   locale?: string
-  module: string
+  modifiedAt?: string
   projections: Record<string, JsonValue>
   slug?: string
+}
+
+export interface IDocumentRecord extends IDocumentMetadata {
+  module: string
 }
 
 export interface IRenderedManifest {
@@ -72,6 +76,7 @@ export interface IRenderedManifest {
 interface INativePreparedBatch {
   readonly codeBlocksJson: string
   finish(highlightsJson: string): string
+  takeMetadataJson(): string
 }
 
 interface INativeBinding {
@@ -83,6 +88,7 @@ interface INativeBinding {
 export interface IPreparedNativeBatch {
   codeBlocks: ICodeBlock[]
   finish(highlights: IHighlightedCodeBlock[]): IDocumentRecord[]
+  takeMetadata(): IDocumentMetadata[]
 }
 
 export class AmamoMdxError extends Error {
@@ -138,6 +144,13 @@ export function prepareNativeBatch(
           return mapNativeError(error)
         }
       },
+      takeMetadata() {
+        try {
+          return JSON.parse(batch.takeMetadataJson()) as IDocumentMetadata[]
+        } catch (error) {
+          return mapNativeError(error)
+        }
+      },
     }
   } catch (error) {
     return mapNativeError(error)
@@ -154,11 +167,15 @@ export function pruneNativeCache(cacheDirectory: string, keepKeys: string[]): nu
 
 export function renderNativeManifests(
   config: IAmamoMDXConfig,
-  records: IDocumentRecord[],
+  records: IDocumentMetadata[],
 ): IRenderedManifest[] {
   try {
+    const manifestRecords = records.map(({ key, projections }) => ({
+      key,
+      projections,
+    }))
     return JSON.parse(
-      loadBinding().renderManifests(nativeConfigJson(config), JSON.stringify(records)),
+      loadBinding().renderManifests(nativeConfigJson(config), JSON.stringify(manifestRecords)),
     ) as IRenderedManifest[]
   } catch (error) {
     return mapNativeError(error)

@@ -68,3 +68,36 @@ test('unknown language behavior is configurable', async () => {
     await plain.dispose()
   }
 })
+
+test('expands duplicate highlights back to their document identities', async () => {
+  const renderer = await createShikiRenderer(config)
+  try {
+    const result = await renderer.highlight([
+      {
+        blockId: 1,
+        code: 'const duplicate = true',
+        documentId: 'posts/a',
+        lang: 'ts',
+        meta: null,
+      },
+      {
+        blockId: 4,
+        code: 'const duplicate = true',
+        documentId: 'posts/b',
+        lang: 'ts',
+        meta: null,
+      },
+    ])
+
+    assert.deepEqual(
+      result.map(({ blockId, documentId }) => ({ blockId, documentId })),
+      [
+        { blockId: 1, documentId: 'posts/a' },
+        { blockId: 4, documentId: 'posts/b' },
+      ],
+    )
+    assert.deepEqual(result[0]?.hast, result[1]?.hast)
+  } finally {
+    await renderer.dispose()
+  }
+})

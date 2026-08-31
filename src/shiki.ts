@@ -75,8 +75,18 @@ export async function createShikiRenderer(
     },
     async highlight(blocks) {
       if (disposed) throw new Error('AMAMO_SHIKI_DISPOSED: Shiki renderer is disposed')
-      const languages = await Promise.all(blocks.map((block) => loadLanguage(block.lang)))
-      return blocks.map((block, index) => {
+      const keys = blocks.map(
+        (block) => JSON.stringify([block.lang, block.meta, block.code]) as string,
+      )
+      const uniqueBlocks = new Map<string, ICodeBlock>()
+      for (const [index, block] of blocks.entries()) {
+        const key = keys[index]
+        if (key !== undefined && !uniqueBlocks.has(key)) uniqueBlocks.set(key, block)
+      }
+      const entries = [...uniqueBlocks.entries()]
+      const languages = await Promise.all(entries.map(([, block]) => loadLanguage(block.lang)))
+      const highlighted = new Map<string, JsonValue>()
+      for (const [index, [key, block]] of entries.entries()) {
         const language = block.lang
         const hast = highlighter.codeToHast(block.code, {
           colorReplacements: config.colorReplacements,
@@ -99,10 +109,18 @@ export async function createShikiRenderer(
                 ]
               : undefined,
         })
+        highlighted.set(key, JSON.parse(JSON.stringify(hast)) as JsonValue)
+      }
+      return blocks.map((block, index) => {
+        const key = keys[index]
+        const hast = key === undefined ? undefined : highlighted.get(key)
+        if (hast === undefined) {
+          throw new Error('AMAMO_SHIKI_RESULT_MISSING: Highlighted code block is missing')
+        }
         return {
           blockId: block.blockId,
           documentId: block.documentId,
-          hast: JSON.parse(JSON.stringify(hast)) as JsonValue,
+          hast,
         }
       })
     },

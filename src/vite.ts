@@ -33,10 +33,10 @@ export function amamoMdx(config: IAmamoMdxConfig): Plugin {
     async buildStart() {
       await ensureBuild()
     },
-    async transform(_source, id) {
+    async transform(source, id) {
       const instance = await compiler()
       if (!instance.isContentFile(id)) return null
-      const result = await instance.transform(id)
+      const result = await instance.transformSource(id, source)
       return { code: result.code, map: result.map }
     },
     async configureServer(server) {

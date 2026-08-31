@@ -33,18 +33,24 @@ export function withAmamoMdx(config: IAmamoMdxConfig) {
   }
   let compilerPromise: Promise<IAdapterCompiler> | undefined
   let buildPromise: Promise<unknown> | undefined
+  let scanPromise: Promise<unknown> | undefined
   let watching = false
 
   function compiler(): Promise<IAdapterCompiler> {
-    compilerPromise ??= createAdapterCompiler(config)
+    compilerPromise ??= createAdapterCompiler(config, { retainModules: false })
     return compilerPromise
   }
 
   async function prepare(phase: string): Promise<void> {
     if (phase !== PHASE_DEVELOPMENT_SERVER && phase !== PHASE_PRODUCTION_BUILD) return
-    buildPromise ??= compiler().then((instance) => instance.build())
-    await buildPromise
-    if (phase === PHASE_DEVELOPMENT_SERVER && !watching) {
+    if (phase === PHASE_PRODUCTION_BUILD) {
+      buildPromise ??= compiler().then((instance) => instance.build())
+      await buildPromise
+      return
+    }
+    scanPromise ??= compiler().then((instance) => instance.scan())
+    await scanPromise
+    if (!watching) {
       const instance = await compiler()
       instance.startWatch()
       watching = true

@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
+import { access, readFile, realpath } from 'node:fs/promises'
 import { createRequire } from 'node:module'
+import path from 'node:path'
 
 import type { NextConfig } from 'next'
 import { PHASE_PRODUCTION_BUILD } from 'next/constants.js'
 import { test } from 'vitest'
 
+import { createAdapterCompiler } from '../compiler.js'
 import { withAmamoMdx } from '../next.js'
 import { createCompilerFixture } from './fixture.js'
 
@@ -14,8 +17,15 @@ interface ILoaderOptions {
 }
 
 interface ILoaderContext {
+  addDependency(file: string): void
   getOptions(): ILoaderOptions
   resourcePath: string
+}
+
+interface ILoaderIndex {
+  cacheDirectory: string
+  configFingerprint: string
+  documents: Record<string, { cacheKey: string }>
 }
 
 type NextLoader = (this: ILoaderContext, source: string) => Promise<string>
@@ -59,9 +69,9 @@ test('adds the same loader to Turbopack and Webpack while preserving config', as
     const loaderItem = rule.loaders[0]
     assert.ok(loaderItem && typeof loaderItem === 'object' && loaderItem.options)
     const options = loaderItem.options as unknown as ILoaderOptions
-    assert.match(await runLoader(fixture.post, options), /Hello/)
+    assert.match(await runLoader(fixture.post, options, fixture.source), /Hello/)
     await assert.rejects(
-      runLoader(fixture.post, { ...options, configFingerprint: 'stale' }),
+      runLoader(fixture.post, { ...options, configFingerprint: 'stale' }, fixture.source),
       /AMAMO_NEXT_CACHE_MISS/,
     )
   } finally {
@@ -69,12 +79,43 @@ test('adds the same loader to Turbopack and Webpack while preserving config', as
   }
 })
 
-function runLoader(resourcePath: string, options: ILoaderOptions): Promise<string> {
+test('scans metadata before compiling a Next cache miss on demand', async () => {
+  const fixture = await createCompilerFixture()
+  const compiler = await createAdapterCompiler(fixture.config, { retainModules: false })
+  try {
+    const result = await compiler.scan()
+    assert.equal(result.compiled, 0)
+    const indexFile = path.join(fixture.generatedDirectory, 'index.json')
+    const index = JSON.parse(await readFile(indexFile, 'utf8')) as ILoaderIndex
+    const document = index.documents[await realpath(fixture.post)]
+    assert.ok(document)
+    const cacheFile = path.join(
+      index.cacheDirectory,
+      document.cacheKey.slice(0, 2),
+      `${document.cacheKey}.json`,
+    )
+    await assert.rejects(access(cacheFile), { code: 'ENOENT' })
+
+    const code = await runLoader(
+      fixture.post,
+      { configFingerprint: index.configFingerprint, indexFile },
+      fixture.source,
+    )
+    assert.match(code, /Hello/)
+    await access(cacheFile)
+  } finally {
+    await compiler.dispose()
+    await fixture.cleanup()
+  }
+})
+
+function runLoader(resourcePath: string, options: ILoaderOptions, source: string): Promise<string> {
   return nextLoader.call(
     {
+      addDependency() {},
       getOptions: () => options,
       resourcePath,
     },
-    '',
+    source,
   )
 }

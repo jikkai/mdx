@@ -10,17 +10,17 @@
     "types:check": "tsc --noEmit"
   },
   "dependencies": {
-    "@amamo/doctrine": "0.2.3",
+    "@amamo/doctrine": "0.3.0",
     "@base-ui/react": "1.7.0",
-    "lucide-react": "1.31.0",
+    "lucide-react": "1.37.0",
     "pagefind": "1.5.2",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.4.0",
     "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
+    "@types/react-dom": "19.2.5",
     "typescript": "^7.0.2"
   }
 }

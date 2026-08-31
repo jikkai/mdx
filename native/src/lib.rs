@@ -20,7 +20,9 @@ use crate::cache::{
 use crate::config::{NativeCacheConfig, NativeConfig, NativeMdxConfig};
 use crate::document::{ParsedFrontmatter, PreparedMdx, finish_mdx, parse_frontmatter, prepare_mdx};
 use crate::hast::{decode_highlights, inject_highlights};
-use crate::manifest::{project_document, render_manifests as render_manifest_outputs};
+use crate::manifest::{
+    ManifestRecord, project_document, render_manifests as render_manifest_outputs,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -108,6 +110,28 @@ enum PreparedDocument {
     Pending(Box<PendingDocument>),
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DocumentMetadata {
+    cached: bool,
+    collection: String,
+    key: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    locale: Option<String>,
+    file: String,
+    hash: String,
+    cache_key: String,
+    frontmatter: Value,
+    derived: Value,
+    dependencies: Vec<String>,
+    projections: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    slug: Option<String>,
+    diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    modified_at: Option<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct DocumentRecord {
@@ -127,6 +151,67 @@ pub(crate) struct DocumentRecord {
     slug: Option<String>,
     module: String,
     diagnostics: Vec<Diagnostic>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    modified_at: Option<String>,
+}
+
+impl From<DocumentRecord> for DocumentMetadata {
+    fn from(record: DocumentRecord) -> Self {
+        Self {
+            cached: record.cached,
+            collection: record.collection,
+            key: record.key,
+            locale: record.locale,
+            file: record.file,
+            hash: record.hash,
+            cache_key: record.cache_key,
+            frontmatter: record.frontmatter,
+            derived: record.derived,
+            dependencies: record.dependencies,
+            projections: record.projections,
+            slug: record.slug,
+            diagnostics: record.diagnostics,
+            modified_at: record.modified_at,
+        }
+    }
+}
+
+impl PreparedDocument {
+    fn into_metadata(self) -> DocumentMetadata {
+        match self {
+            Self::Cached(record) => (*record).into(),
+            Self::Pending(document) => {
+                let document = *document;
+                let mut diagnostics = document.prepared.diagnostics;
+                if let Some(warning) = document.cache_warning {
+                    diagnostics.push(warning);
+                }
+                DocumentMetadata {
+                    cached: false,
+                    collection: document.input.collection,
+                    key: document.input.key,
+                    locale: document.input.locale,
+                    file: document.input.file,
+                    hash: blake3::hash(document.input.source.as_bytes())
+                        .to_hex()
+                        .to_string(),
+                    cache_key: document.cache_key,
+                    frontmatter: document.parsed.frontmatter,
+                    derived: document.derived,
+                    dependencies: document
+                        .prepared
+                        .dependencies
+                        .into_iter()
+                        .map(|path| path.to_string_lossy().into_owned())
+                        .collect(),
+                    projections: document.projections,
+                    slug: document.input.slug,
+                    diagnostics,
+                    modified_at: document.input.modified_at,
+                }
+            }
+        }
+    }
 }
 
 #[napi]
@@ -150,6 +235,20 @@ impl PreparedBatch {
             .flatten()
             .collect::<Vec<_>>();
         serde_json::to_string(&blocks).unwrap_or_else(|_| "[]".into())
+    }
+
+    #[napi]
+    pub fn take_metadata_json(&mut self) -> Result<String> {
+        let metadata = std::mem::take(&mut self.documents)
+            .into_iter()
+            .map(PreparedDocument::into_metadata)
+            .collect::<Vec<_>>();
+        serde_json::to_string(&metadata).map_err(|error| {
+            Error::new(
+                Status::GenericFailure,
+                format!("AMAMO_NATIVE_SERIALIZE: {error}"),
+            )
+        })
     }
 
     #[napi]
@@ -248,6 +347,7 @@ impl PreparedBatch {
                         slug: document.input.slug,
                         module,
                         diagnostics,
+                        modified_at: document.input.modified_at,
                     };
                     if cache.enabled {
                         let value = serde_json::to_value(&record).map_err(|error| {
@@ -307,6 +407,7 @@ pub fn prepare_batch(config_json: String, inputs_json: String) -> Result<Prepare
                                 .all(|path| Path::new(path).exists()) =>
                     {
                         record.cached = true;
+                        record.modified_at = input.modified_at;
                         documents.push(PreparedDocument::Cached(Box::new(record)));
                         continue;
                     }
@@ -395,7 +496,7 @@ pub fn prepare_batch(config_json: String, inputs_json: String) -> Result<Prepare
 #[napi]
 pub fn render_manifests(config_json: String, records_json: String) -> Result<String> {
     let config: NativeConfig = decode_json(&config_json, "configuration")?;
-    let records: Vec<DocumentRecord> = decode_json(&records_json, "document records")?;
+    let records: Vec<ManifestRecord> = decode_json(&records_json, "document records")?;
     let outputs = render_manifest_outputs(&config, &records).map_err(diagnostic_error)?;
     serde_json::to_string(&outputs).map_err(|error| {
         Error::new(

@@ -1,14 +1,19 @@
-import { execFile } from 'node:child_process'
 import type { FSWatcher } from 'node:fs'
-import { realpathSync, watch } from 'node:fs'
 import type { FileHandle } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { realpathSync, watch } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 
 import type { IAmamoMDXConfig, IAmamoMdxConfig, INormalizedCollectionConfig } from './config.js'
 import { normalizeConfig } from './config.js'
-import type { IDocumentRecord, INativeDocumentInput } from './native.js'
+import type {
+  IDocumentMetadata,
+  IDocumentRecord,
+  IHighlightedCodeBlock,
+  INativeDocumentInput,
+} from './native.js'
 import {
   configurationFingerprint,
   prepareNativeBatch,
@@ -43,7 +48,9 @@ export interface ICompiler {
 export interface IAdapterCompiler extends ICompiler {
   readonly generatedCollectionModule: string
   isContentFile(file: string): boolean
+  scan(): Promise<IBuildResult>
   startWatch(onGeneratedChange?: (paths: string[]) => Promise<void> | void): () => void
+  transformSource(file: string, source: string): Promise<ITransformResult>
 }
 
 interface IFileMetadata {
@@ -68,14 +75,17 @@ class Compiler implements IAdapterCompiler {
   private disposed = false
   private generatedListener: ((paths: string[]) => Promise<void> | void) | undefined
   private readonly gitModifiedTimes = new Map<string, string>()
-  private readonly records = new Map<string, IDocumentRecord>()
+  private readonly modules = new Map<string, string>()
+  private readonly records = new Map<string, IDocumentMetadata>()
+  private readonly sources = new Map<string, string>()
+  private shikiPromise: Promise<IShikiRenderer> | undefined
   private tail: Promise<void> = Promise.resolve()
   private watcher: FSWatcher | undefined
   private watcherError: Error | undefined
 
   public constructor(
     private readonly config: IAmamoMDXConfig,
-    private readonly shiki: IShikiRenderer | undefined,
+    private readonly retainModules: boolean,
   ) {
     this.generatedCollectionModule = path.join(config.generatedDirectory, 'collections.mjs')
   }
@@ -101,10 +111,20 @@ class Compiler implements IAdapterCompiler {
     return this.enqueue(() => this.transformNow(cleanFileId(file)))
   }
 
+  public transformSource(file: string, source: string): Promise<ITransformResult> {
+    return this.enqueue(() => this.transformNow(cleanFileId(file), source))
+  }
+
+  public scan(): Promise<IBuildResult> {
+    return this.enqueue(() => this.scanNow())
+  }
+
   public remove(file: string): Promise<number> {
     return this.enqueue(async () => {
       const absolute = cleanFileId(file)
       if (!this.records.delete(absolute)) return 0
+      this.modules.delete(absolute)
+      this.sources.delete(absolute)
       const changed = await this.writeOutputs()
       if (this.config.cache.enabled) {
         pruneNativeCache(
@@ -122,7 +142,8 @@ class Compiler implements IAdapterCompiler {
     await this.enqueue(async () => {
       this.watcher?.close()
       this.watcher = undefined
-      this.shiki?.dispose()
+      const shiki = this.shikiPromise ? await this.shikiPromise : undefined
+      shiki?.dispose()
       this.disposed = true
     }, false)
   }
@@ -186,8 +207,14 @@ class Compiler implements IAdapterCompiler {
   private async buildNow(): Promise<IBuildResult> {
     const discovered = await this.discover()
     const records = await this.compile(discovered.map((document) => document.input))
-    this.records.clear()
-    for (const record of records) this.records.set(path.resolve(record.file), record)
+    this.replaceRecords(
+      records.map(documentMetadata),
+      discovered.map((document) => document.input),
+    )
+    this.modules.clear()
+    if (this.retainModules) {
+      for (const record of records) this.modules.set(path.resolve(record.file), record.module)
+    }
     const changed = await this.writeOutputs()
     if (this.config.cache.enabled) {
       pruneNativeCache(
@@ -204,7 +231,45 @@ class Compiler implements IAdapterCompiler {
     }
   }
 
-  private async transformNow(file: string): Promise<ITransformResult> {
+  private async scanNow(): Promise<IBuildResult> {
+    const discovered = await this.discover()
+    const inputs = discovered.map((document) => document.input)
+    const records = prepareNativeBatch(this.config, inputs).takeMetadata()
+    this.replaceRecords(records, inputs)
+    this.modules.clear()
+    const changed = await this.writeOutputs()
+    if (this.config.cache.enabled) {
+      pruneNativeCache(
+        this.config.cache.directory,
+        records.map((record) => record.cacheKey),
+      )
+    }
+    await this.notifyGeneratedChange(changed)
+    return {
+      cached: records.filter((record) => record.cached).length,
+      compiled: 0,
+      discovered: discovered.length,
+      outputsWritten: changed.length,
+    }
+  }
+
+  private async transformNow(file: string, source?: string): Promise<ITransformResult> {
+    const current = this.records.get(file)
+    const currentModule = this.modules.get(file)
+    if (
+      source !== undefined &&
+      source === this.sources.get(file) &&
+      current &&
+      currentModule !== undefined
+    ) {
+      return {
+        cached: true,
+        code: currentModule,
+        map: null,
+        outputsWritten: 0,
+        record: { ...current, cached: true, module: currentModule },
+      }
+    }
     const metadata = this.metadataForFile(file)
     if (!metadata) {
       throw new Error(`AMAMO_FILE_OUTSIDE_COLLECTION: ${file}`)
@@ -218,11 +283,15 @@ class Compiler implements IAdapterCompiler {
         throw new Error(`AMAMO_DOCUMENT_DUPLICATE_KEY: ${metadata.collection}/${metadata.key}`)
       }
     }
-    const document = await this.readDocument(metadata)
+    const document = await this.readDocument(metadata, source)
     const records = await this.compile([document.input])
     const record = records[0]
     if (!record) throw new Error(`AMAMO_NATIVE_RESULT_MISSING: ${file}`)
-    this.records.set(file, record)
+    this.records.set(file, documentMetadata(record))
+    if (this.retainModules) {
+      this.modules.set(file, record.module)
+      this.sources.set(file, document.input.source)
+    }
     const changed = await this.writeOutputs()
     if (this.config.cache.enabled) {
       pruneNativeCache(
@@ -242,7 +311,11 @@ class Compiler implements IAdapterCompiler {
 
   private async compile(inputs: INativeDocumentInput[]): Promise<IDocumentRecord[]> {
     const batch = prepareNativeBatch(this.config, inputs)
-    const highlights = this.shiki ? await this.shiki.highlight(batch.codeBlocks) : []
+    let highlights: IHighlightedCodeBlock[] = []
+    if (this.config.highlight.enabled && batch.codeBlocks.length > 0) {
+      this.shikiPromise ??= createShikiRenderer(this.config.highlight)
+      highlights = await (await this.shikiPromise).highlight(batch.codeBlocks)
+    }
     return batch.finish(highlights)
   }
 
@@ -279,10 +352,13 @@ class Compiler implements IAdapterCompiler {
     return documents.toSorted((left, right) => left.input.file.localeCompare(right.input.file))
   }
 
-  private async readDocument(metadata: IFileMetadata): Promise<IDiscoveredDocument> {
+  private async readDocument(
+    metadata: IFileMetadata,
+    providedSource?: string,
+  ): Promise<IDiscoveredDocument> {
     const [source, stats] = await Promise.all([
-      readFile(metadata.file, 'utf8'),
-      stat(metadata.file),
+      providedSource ?? readFile(metadata.file, 'utf8'),
+      this.config.derived.lastModified ? stat(metadata.file) : undefined,
     ])
     return {
       input: {
@@ -291,7 +367,7 @@ class Compiler implements IAdapterCompiler {
         key: metadata.key,
         locale: metadata.locale,
         modifiedAt: this.config.derived.lastModified
-          ? (this.gitModifiedTimes.get(metadata.file) ?? stats.mtime.toISOString())
+          ? (this.gitModifiedTimes.get(metadata.file) ?? stats?.mtime.toISOString())
           : undefined,
         slug: metadata.slug,
         source,
@@ -328,11 +404,22 @@ class Compiler implements IAdapterCompiler {
         contents: `${JSON.stringify(
           {
             cacheDirectory: this.config.cache.directory,
+            config: this.config,
             configFingerprint: configurationFingerprint(this.config),
             documents: Object.fromEntries(
-              records.map((record) => [record.file, { cacheKey: record.cacheKey }]),
+              records.map((record) => [
+                record.file,
+                {
+                  cacheKey: record.cacheKey,
+                  collection: record.collection,
+                  key: record.key,
+                  locale: record.locale,
+                  modifiedAt: record.modifiedAt,
+                  slug: record.slug,
+                },
+              ]),
             ),
-            version: 1,
+            version: 2,
           },
           null,
           2,
@@ -347,6 +434,15 @@ class Compiler implements IAdapterCompiler {
     return changed
   }
 
+  private replaceRecords(records: IDocumentMetadata[], inputs: INativeDocumentInput[]): void {
+    this.records.clear()
+    for (const record of records) this.records.set(path.resolve(record.file), record)
+    this.sources.clear()
+    if (this.retainModules) {
+      for (const input of inputs) this.sources.set(path.resolve(input.file), input.source)
+    }
+  }
+
   private async notifyGeneratedChange(paths: string[]): Promise<void> {
     if (paths.length === 0 || !this.generatedListener) return
     await this.generatedListener(paths)
@@ -357,12 +453,12 @@ export async function createCompiler(config: IAmamoMdxConfig): Promise<ICompiler
   return createAdapterCompiler(config)
 }
 
-export async function createAdapterCompiler(config: IAmamoMdxConfig): Promise<IAdapterCompiler> {
+export async function createAdapterCompiler(
+  config: IAmamoMdxConfig,
+  options: { retainModules?: boolean } = {},
+): Promise<IAdapterCompiler> {
   const normalized = normalizeConfig(config)
-  const shiki = normalized.highlight.enabled
-    ? await createShikiRenderer(normalized.highlight)
-    : undefined
-  return new Compiler(normalized, shiki)
+  return new Compiler(normalized, options.retainModules ?? true)
 }
 
 function deriveMetadata(
@@ -409,7 +505,7 @@ async function walkFiles(directory: string): Promise<string[]> {
   return files
 }
 
-function generateCollectionModule(config: IAmamoMDXConfig, records: IDocumentRecord[]): string {
+function generateCollectionModule(config: IAmamoMDXConfig, records: IDocumentMetadata[]): string {
   const collections = Object.keys(config.collections).toSorted()
   const lines = ['export const collections = {']
   for (const collection of collections) {
@@ -478,8 +574,27 @@ async function writeIfChanged(file: string, contents: string): Promise<boolean> 
   return true
 }
 
-function compareRecords(left: IDocumentRecord, right: IDocumentRecord): number {
+function compareRecords(left: IDocumentMetadata, right: IDocumentMetadata): number {
   return left.collection.localeCompare(right.collection) || left.key.localeCompare(right.key)
+}
+
+function documentMetadata(record: IDocumentRecord): IDocumentMetadata {
+  return {
+    cacheKey: record.cacheKey,
+    cached: record.cached,
+    collection: record.collection,
+    dependencies: record.dependencies,
+    derived: record.derived,
+    diagnostics: record.diagnostics,
+    file: record.file,
+    frontmatter: record.frontmatter,
+    hash: record.hash,
+    key: record.key,
+    locale: record.locale,
+    modifiedAt: record.modifiedAt,
+    projections: record.projections,
+    slug: record.slug,
+  }
 }
 
 function cleanFileId(file: string): string {
