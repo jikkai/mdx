@@ -7,7 +7,7 @@ native binding, so use the full quality gate before handing work off.
 ## Prerequisites
 
 - Node.js 20.19 or newer. CI currently runs Node.js 24.
-- pnpm 11.20.0.
+- pnpm 12.23.0.
 - Rust 1.97.1 with `rustfmt` and `clippy`.
 - A supported local target from [the native target list](./apps/docs/docs/native-targets.mdx).
 

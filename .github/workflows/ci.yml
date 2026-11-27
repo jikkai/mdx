@@ -27,6 +27,6 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check
       - run: pnpm run build
-      - run: pnpm --dir fixtures/next exec next build --turbopack
-      - run: pnpm --dir fixtures/next exec next build --webpack
+      - run: pnpm exec next build fixtures/next --turbopack
+      - run: pnpm exec next build fixtures/next --webpack
       - run: npm pack --dry-run --ignore-scripts
