@@ -60,7 +60,7 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@amamo/oxlint-config": "1.2.0",
+    "@amamo/oxlint-config": "1.3.0",
     "@amamo/verso": "1.3.2",
     "@napi-rs/cli": "3.11.1",
     "@types/node": "26.6.11",
