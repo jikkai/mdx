@@ -326,8 +326,8 @@ cache: {
 
 Cache keys are BLAKE3 digests over the cache format, native crate version, OS, architecture, target
 mode, normalized config plus runtime package versions, source path and bytes, and enabled
-`lastModified` value. A cache hit also requires every previously recorded media dependency to still
-exist.
+`lastModified` value. Adding a previously missing media file or removing a referenced file invalidates the cached
+module on the next compilation.
 
 Corrupt records are removed and recompiled with an `AMAMO_CACHE_CORRUPT` warning. A successful full
 build prunes records no longer referenced by the discovered content set.
@@ -344,7 +344,7 @@ generatedDirectory: '.amamo-mdx'
 The compiler always writes exactly three shared outputs here:
 
 - `collections.mjs`
-- `collections.d.ts`
+- `collections.d.mts`
 - `index.json`
 
 Cache and manifest locations are independent. Relative collection, cache, generated, and manifest

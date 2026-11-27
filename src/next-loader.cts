@@ -1,6 +1,5 @@
 import { readFile, realpath } from 'node:fs/promises'
 import path from 'node:path'
-
 import type { IAmamoMDXConfig } from './config.js'
 import type { INativeDocumentInput } from './native.js'
 
@@ -77,7 +76,9 @@ async function compileModule(context: INextLoaderContext, source: string): Promi
   }
   const { compileNextDocument } = await import('./next-runtime.js')
   const record = await compileNextDocument(config, input)
-  for (const dependency of record.dependencies) context.addDependency(dependency)
+  for (const dependency of [...record.dependencies, ...record.missingDependencies]) {
+    context.addDependency(dependency)
+  }
   return record.module
 }
 

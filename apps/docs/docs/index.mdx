@@ -28,7 +28,7 @@ MDX source + config
   -> Rust: YAML, JSON Schema, MDX tree, media, derived fields
   -> JavaScript: official Shiki themes, grammars, and engine
   -> Rust: highlighted module, validated metadata, manifest projections, cache record
-  -> TypeScript: collections.mjs, collections.d.ts, index.json, manifests
+  -> TypeScript: collections.mjs, collections.d.mts, index.json, manifests
 ```
 
 Rust owns parsing, validation, MDX compilation, manifest projection, and persistent records. Shiki
@@ -41,7 +41,7 @@ or adapter instance owns its own state.
 - A JavaScript module for every imported MDX document, including `frontmatter` and enabled derived
   exports.
 - `collections.mjs`, a deterministic registry of document metadata and lazy source imports.
-- `collections.d.ts`, a companion declaration output for the registry.
+- `collections.d.mts`, a companion declaration output for the registry.
 - Optional JSON manifests with explicit field projection, sorting, and array or keyed-object output.
 - BLAKE3-addressed cache records so unchanged documents can skip native compilation and Shiki.
 

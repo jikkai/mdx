@@ -153,7 +153,7 @@ frontmatter values.
 After a build, `generatedDirectory` contains:
 
 - `collections.mjs` — sorted arrays of `{ derived, frontmatter, key, locale, slug, load }`.
-- `collections.d.ts` — a companion declaration output for the registry.
+- `collections.d.mts` — a companion declaration output for the registry.
 - `index.json` — source path, cache key, cache directory, and config fingerprint for the Next loader.
 
 The registry's `load()` functions import the original MDX sources. A host bundler still needs the

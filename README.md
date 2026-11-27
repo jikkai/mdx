@@ -152,7 +152,7 @@ plugin or Next loader.
 The first build writes these files under `generatedDirectory`, which defaults to `.amamo-mdx`:
 
 - `collections.mjs` — sorted collection metadata and lazy source imports;
-- `collections.d.ts` — TypeScript declarations for the registry;
+- `collections.d.mts` — TypeScript declarations for the registry;
 - `index.json` — the source-to-cache index used by the Next loader.
 
 Cache and manifest paths are configured separately from `generatedDirectory`. Add `.amamo-mdx/` to

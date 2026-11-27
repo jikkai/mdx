@@ -25,7 +25,7 @@ pub fn key(
 ) -> String {
     let mut hasher = blake3::Hasher::new();
     for value in [
-        "amamo-mdx-cache-v1",
+        "amamo-mdx-cache-v2",
         env!("CARGO_PKG_VERSION"),
         std::env::consts::OS,
         std::env::consts::ARCH,

@@ -12,7 +12,7 @@ export default amamo(
   {
     overrides: [
       {
-        files: ['src/compiler.ts', 'src/__tests__/vite.test.ts'],
+        files: ['src/compiler.ts', 'src/__tests__/vite.spec.ts'],
         rules: { 'no-await-in-loop': 'off' },
       },
       {

@@ -309,8 +309,8 @@ cache: {
 ```
 
 缓存键是 BLAKE3 digest，输入包括缓存格式、原生 crate 版本、OS、架构、目标模式、归一化配置
-和运行时包版本、源码路径和字节，以及已启用的 `lastModified` 值。命中缓存还要求之前记录的
-所有媒体依赖仍然存在。
+和运行时包版本、源码路径和字节，以及已启用的 `lastModified` 值。补上缺失的媒体文件或删除已引用的文件后，
+下次编译会重新生成对应的模块。
 
 损坏记录会被删除并重新编译，同时产生 `AMAMO_CACHE_CORRUPT` warning。成功的完整构建会清理
 已经不再被发现内容引用的记录。
@@ -327,7 +327,7 @@ generatedDirectory: '.amamo-mdx'
 编译器固定在这里写三个共享产物：
 
 - `collections.mjs`
-- `collections.d.ts`
+- `collections.d.mts`
 - `index.json`
 
 缓存和 manifest 位置彼此独立。集合、缓存、生成目录和 manifest 的相对配置路径从 `root` 解析，

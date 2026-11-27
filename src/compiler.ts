@@ -1,11 +1,10 @@
 import type { FSWatcher } from 'node:fs'
 import type { FileHandle } from 'node:fs/promises'
 import { execFile } from 'node:child_process'
-import { realpathSync, watch } from 'node:fs'
+import { existsSync, realpathSync, watch } from 'node:fs'
 import { mkdir, open, readFile, readdir, rename, rm, stat } from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
-
 import type { IAmamoMDXConfig, IAmamoMdxConfig, INormalizedCollectionConfig } from './config.js'
 import { normalizeConfig } from './config.js'
 import type {
@@ -48,8 +47,12 @@ export interface ICompiler {
 export interface IAdapterCompiler extends ICompiler {
   readonly generatedCollectionModule: string
   isContentFile(file: string): boolean
+  filesReferencingMedia(file: string): string[]
   scan(): Promise<IBuildResult>
-  startWatch(onGeneratedChange?: (paths: string[]) => Promise<void> | void): () => void
+  startWatch(
+    onGeneratedChange?: (paths: string[]) => Promise<void> | void,
+    onError?: (error: Error) => void,
+  ): () => void
   transformSource(file: string, source: string): Promise<ITransformResult>
 }
 
@@ -81,7 +84,6 @@ class Compiler implements IAdapterCompiler {
   private shikiPromise: Promise<IShikiRenderer> | undefined
   private tail: Promise<void> = Promise.resolve()
   private watcher: FSWatcher | undefined
-  private watcherError: Error | undefined
 
   public constructor(
     private readonly config: IAmamoMDXConfig,
@@ -120,21 +122,7 @@ class Compiler implements IAdapterCompiler {
   }
 
   public remove(file: string): Promise<number> {
-    return this.enqueue(async () => {
-      const absolute = cleanFileId(file)
-      if (!this.records.delete(absolute)) return 0
-      this.modules.delete(absolute)
-      this.sources.delete(absolute)
-      const changed = await this.writeOutputs()
-      if (this.config.cache.enabled) {
-        pruneNativeCache(
-          this.config.cache.directory,
-          [...this.records.values()].map((record) => record.cacheKey),
-        )
-      }
-      await this.notifyGeneratedChange(changed)
-      return changed.length
-    })
+    return this.enqueue(() => this.removeNow(cleanFileId(file)))
   }
 
   public async dispose(): Promise<void> {
@@ -152,27 +140,37 @@ class Compiler implements IAdapterCompiler {
     return this.metadataForFile(cleanFileId(file)) !== undefined
   }
 
-  public startWatch(onGeneratedChange?: (paths: string[]) => Promise<void> | void): () => void {
+  public filesReferencingMedia(file: string): string[] {
+    const absolute = path.resolve(file)
+    return [...this.records.values()]
+      .filter(
+        (record) =>
+          record.dependencies.includes(absolute) || record.missingDependencies.includes(absolute),
+      )
+      .map((record) => record.file)
+  }
+
+  public startWatch(
+    onGeneratedChange?: (paths: string[]) => Promise<void> | void,
+    onError: (error: Error) => void = console.error,
+  ): () => void {
     if (this.watcher) return () => this.stopWatch()
     this.generatedListener = onGeneratedChange
-    this.watcher = watch(this.config.root, { recursive: true }, async (_event, filename) => {
+    this.watcher = watch(this.config.root, { recursive: true }, (_event, filename) => {
       if (!filename) return
       const file = path.resolve(this.config.root, filename.toString())
       if (!this.isContentFile(file) && !this.records.has(file)) return
-      try {
-        await stat(file)
-        await this.transform(file)
-      } catch (error) {
-        if (isMissingFile(error)) {
-          await this.remove(file)
-        } else {
-          this.watcherError = asError(error)
+      return this.enqueue(async () => {
+        const absolute = cleanFileId(file)
+        try {
+          await this.transformNow(absolute)
+        } catch (error) {
+          if (!isMissingFile(error) || existsSync(absolute)) throw error
+          await this.removeNow(absolute)
         }
-      }
+      }).catch((error: unknown) => onError(asError(error)))
     })
-    this.watcher.on('error', (error) => {
-      this.watcherError = error
-    })
+    this.watcher.on('error', onError)
     return () => this.stopWatch()
   }
 
@@ -184,7 +182,8 @@ class Compiler implements IAdapterCompiler {
 
   private enqueue<T>(operation: () => Promise<T>, requireOpen = true): Promise<T> {
     const run = async () => {
-      if (requireOpen) this.assertOpen()
+      if (requireOpen && this.disposed)
+        throw new Error('AMAMO_COMPILER_DISPOSED: Compiler is disposed')
       return operation()
     }
     const result = this.tail.then(run, run)
@@ -193,15 +192,6 @@ class Compiler implements IAdapterCompiler {
       () => undefined,
     )
     return result
-  }
-
-  private assertOpen(): void {
-    if (this.disposed) throw new Error('AMAMO_COMPILER_DISPOSED: Compiler is disposed')
-    if (this.watcherError) {
-      const error = this.watcherError
-      this.watcherError = undefined
-      throw error
-    }
   }
 
   private async buildNow(): Promise<IBuildResult> {
@@ -253,6 +243,21 @@ class Compiler implements IAdapterCompiler {
     }
   }
 
+  private async removeNow(file: string): Promise<number> {
+    if (!this.records.delete(file)) return 0
+    this.modules.delete(file)
+    this.sources.delete(file)
+    const changed = await this.writeOutputs()
+    if (this.config.cache.enabled) {
+      pruneNativeCache(
+        this.config.cache.directory,
+        [...this.records.values()].map((record) => record.cacheKey),
+      )
+    }
+    await this.notifyGeneratedChange(changed)
+    return changed.length
+  }
+
   private async transformNow(file: string, source?: string): Promise<ITransformResult> {
     const current = this.records.get(file)
     const currentModule = this.modules.get(file)
@@ -260,7 +265,9 @@ class Compiler implements IAdapterCompiler {
       source !== undefined &&
       source === this.sources.get(file) &&
       current &&
-      currentModule !== undefined
+      currentModule !== undefined &&
+      current.dependencies.every(existsSync) &&
+      !current.missingDependencies.some(existsSync)
     ) {
       return {
         cached: true,
@@ -398,7 +405,7 @@ class Compiler implements IAdapterCompiler {
       },
       {
         contents: generateCollectionTypes(),
-        path: path.join(this.config.generatedDirectory, 'collections.d.ts'),
+        path: path.join(this.config.generatedDirectory, 'collections.d.mts'),
       },
       {
         contents: `${JSON.stringify(
@@ -591,6 +598,7 @@ function documentMetadata(record: IDocumentRecord): IDocumentMetadata {
     cached: record.cached,
     collection: record.collection,
     dependencies: record.dependencies,
+    missingDependencies: record.missingDependencies,
     derived: record.derived,
     diagnostics: record.diagnostics,
     file: record.file,

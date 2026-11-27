@@ -7,7 +7,7 @@ mod manifest;
 mod math;
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use napi::bindgen_prelude::{Error, Result, Status};
 use napi_derive::napi;
@@ -125,6 +125,7 @@ struct DocumentMetadata {
     frontmatter: Value,
     derived: Value,
     dependencies: Vec<String>,
+    missing_dependencies: Vec<PathBuf>,
     projections: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     slug: Option<String>,
@@ -147,6 +148,7 @@ pub(crate) struct DocumentRecord {
     frontmatter: Value,
     derived: Value,
     dependencies: Vec<String>,
+    missing_dependencies: Vec<PathBuf>,
     projections: Value,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     slug: Option<String>,
@@ -169,6 +171,7 @@ impl From<DocumentRecord> for DocumentMetadata {
             frontmatter: record.frontmatter,
             derived: record.derived,
             dependencies: record.dependencies,
+            missing_dependencies: record.missing_dependencies,
             projections: record.projections,
             slug: record.slug,
             diagnostics: record.diagnostics,
@@ -205,6 +208,7 @@ impl PreparedDocument {
                         .into_iter()
                         .map(|path| path.to_string_lossy().into_owned())
                         .collect(),
+                    missing_dependencies: document.prepared.missing_dependencies,
                     projections: document.projections,
                     slug: document.input.slug,
                     diagnostics,
@@ -324,6 +328,8 @@ impl PreparedBatch {
                         .iter()
                         .map(|path| path.to_string_lossy().into_owned())
                         .collect();
+                    let missing_dependencies =
+                        std::mem::take(&mut document.prepared.missing_dependencies);
                     let diagnostics = std::mem::take(&mut document.prepared.diagnostics);
                     let module = finish_mdx(
                         document.prepared,
@@ -344,6 +350,7 @@ impl PreparedBatch {
                         frontmatter: document.parsed.frontmatter,
                         derived: document.derived,
                         dependencies,
+                        missing_dependencies,
                         projections: document.projections,
                         slug: document.input.slug,
                         module,
@@ -405,7 +412,8 @@ pub fn prepare_batch(config_json: String, inputs_json: String) -> Result<Prepare
                             && record
                                 .dependencies
                                 .iter()
-                                .all(|path| Path::new(path).exists()) =>
+                                .all(|path| Path::new(path).exists())
+                            && !record.missing_dependencies.iter().any(|path| path.exists()) =>
                     {
                         record.cached = true;
                         record.modified_at = input.modified_at;

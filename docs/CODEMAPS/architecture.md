@@ -22,7 +22,7 @@ IAmamoMdxConfig
   -> native/src/: YAML -> schema -> MDAST/HAST -> media + projections
   -> src/shiki.ts: highlighted HAST
   -> native/src/: inject highlights -> JS module -> cache record
-  -> src/compiler.ts: manifests + collections.mjs + collections.d.ts + index.json
+  -> src/compiler.ts: manifests + collections.mjs + collections.d.mts + index.json
 ```
 
 The Rust binding owns parsing, validation, MDX compilation, manifest projection, and persistent
@@ -47,7 +47,7 @@ rules, even if a collection config lists another extension.
 
 ## Persistence
 
-- `generatedDirectory`: `collections.mjs`, `collections.d.ts`, `index.json`.
+- `generatedDirectory`: `collections.mjs`, `collections.d.mts`, `index.json`.
 - `cache.directory`: BLAKE3-addressed document records, including highlighted output.
 - `manifests.*.output`: JSON arrays or keyed objects resolved independently from `root`.
 - Shared generated files and manifests compare bytes before writing.
