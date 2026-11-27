@@ -16,6 +16,7 @@ use crate::config::{MediaMissing, NativeMediaConfig};
 #[derive(Debug, Default)]
 pub struct MediaRewrite {
     pub dependencies: Vec<PathBuf>,
+    pub missing_dependencies: Vec<PathBuf>,
     pub diagnostics: Vec<Diagnostic>,
     pub synthetic_jsx_spans: Vec<Span>,
 }
@@ -24,6 +25,7 @@ struct MediaContext<'a> {
     bindings: HashMap<String, String>,
     config: &'a NativeMediaConfig,
     dependencies: Vec<PathBuf>,
+    missing_dependencies: Vec<PathBuf>,
     diagnostics: Vec<Diagnostic>,
     file: &'a Path,
     imports: Vec<(String, String)>,
@@ -328,6 +330,7 @@ pub fn rewrite_media(
         bindings: HashMap::new(),
         config,
         dependencies: vec![],
+        missing_dependencies: vec![],
         diagnostics: vec![],
         file,
         imports: vec![],
@@ -361,6 +364,7 @@ pub fn rewrite_media(
 
     Ok(MediaRewrite {
         dependencies: context.dependencies,
+        missing_dependencies: context.missing_dependencies,
         diagnostics: context.diagnostics,
         synthetic_jsx_spans: context.synthetic_jsx_spans,
     })
@@ -468,6 +472,9 @@ fn rewrite_url(
             canonical_target
         }
         Err(_) if context.config.missing == MediaMissing::Warn => {
+            if !context.missing_dependencies.contains(&target) {
+                context.missing_dependencies.push(target);
+            }
             context.diagnostics.push(Diagnostic::warning(
                 "AMAMO_MEDIA_MISSING",
                 context.file.to_str(),

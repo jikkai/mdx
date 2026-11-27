@@ -163,14 +163,14 @@ const module = await hello?.load()
 ```text
 .amamo-mdx/
   cache/
-  collections.d.ts
+  collections.d.mts
   collections.mjs
   index.json
   public.json
 ```
 
 - `collections.mjs` 包含排序后的元数据和延迟 import。
-- `collections.d.ts` 是集合注册表的配套声明文件。
+- `collections.d.mts` 是集合注册表的配套声明文件。
 - `index.json` 把源码路径映射到 Next loader 使用的缓存记录；Vite 不读取它。
 - `cache/` 保存可复用的编译记录，其中已经包含高亮结果。
 - `public.json` 是配置的 manifest；不同的 `output` 可以把 manifest 放到其它位置。

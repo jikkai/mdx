@@ -148,7 +148,7 @@ interface IDiagnostic {
 构建完成后，`generatedDirectory` 包含：
 
 - `collections.mjs`：按顺序排列的 `{ derived, frontmatter, key, locale, slug, load }` 数组。
-- `collections.d.ts`：集合注册表的配套声明产物。
+- `collections.d.mts`：集合注册表的配套声明产物。
 - `index.json`：Next loader 使用的源码路径、缓存键、缓存目录和配置指纹。
 
 注册表的 `load()` 会 import 原始 MDX 源码。宿主 bundler 仍需配置 Vite 插件、Next loader 或

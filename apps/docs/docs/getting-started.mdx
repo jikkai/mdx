@@ -167,14 +167,14 @@ With the config above, the first build writes:
 ```text
 .amamo-mdx/
   cache/
-  collections.d.ts
+  collections.d.mts
   collections.mjs
   index.json
   public.json
 ```
 
 - `collections.mjs` contains sorted metadata and lazy imports.
-- `collections.d.ts` is emitted as a companion declaration file for the registry.
+- `collections.d.mts` is emitted as a companion declaration file for the registry.
 - `index.json` maps source paths to cache records for the Next loader; Vite does not read it.
 - `cache/` contains reusable compiled records, including highlighted output.
 - `public.json` is the configured manifest. A different `output` may place a manifest elsewhere.

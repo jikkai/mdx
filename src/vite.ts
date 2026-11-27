@@ -1,5 +1,5 @@
 import type { Plugin, ViteDevServer } from 'vite'
-
+import { normalizePath } from 'vite'
 import type { IAmamoMdxConfig } from './config.js'
 import type { IAdapterCompiler } from './compiler.js'
 import { createAdapterCompiler } from './compiler.js'
@@ -38,6 +38,20 @@ export function amamoMdx(config: IAmamoMdxConfig): Plugin {
       if (!instance.isContentFile(id)) return null
       const result = await instance.transformSource(id, source)
       return { code: result.code, map: result.map }
+    },
+    async hotUpdate({ type, file, modules }) {
+      if (type === 'update') return
+      const instance = await compiler()
+      const owners = instance.filesReferencingMedia(file)
+      if (owners.length === 0) return
+      const affected = new Set(modules)
+      for (const owner of owners) {
+        for (const mod of this.environment.moduleGraph.getModulesByFile(normalizePath(owner)) ??
+          []) {
+          affected.add(mod)
+        }
+      }
+      return [...affected]
     },
     async configureServer(server) {
       await ensureBuild()

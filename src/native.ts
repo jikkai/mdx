@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto'
 import { createRequire } from 'node:module'
-
 import type { IAmamoMDXConfig, JsonValue } from './config.js'
 
 export interface ISourcePoint {
@@ -52,6 +51,7 @@ export interface IDocumentMetadata {
   cached: boolean
   collection: string
   dependencies: string[]
+  missingDependencies: string[]
   derived: Record<string, JsonValue>
   diagnostics: IDiagnostic[]
   file: string

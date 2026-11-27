@@ -1,12 +1,10 @@
 import assert from 'node:assert/strict'
-import { access, readFile, realpath } from 'node:fs/promises'
+import { access, readFile, realpath, unlink, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import path from 'node:path'
-
 import type { NextConfig } from 'next'
 import { PHASE_PRODUCTION_BUILD } from 'next/constants.js'
 import { test } from 'vitest'
-
 import { createAdapterCompiler } from '../compiler.js'
 import { withAmamoMdx } from '../next.js'
 import { createCompilerFixture } from './fixture.js'
@@ -79,10 +77,13 @@ test('adds the same loader to Turbopack and Webpack while preserving config', as
   }
 })
 
-test('scans metadata before compiling a Next cache miss on demand', async () => {
+test('compiles a Next cache miss on demand and watches unresolved media', async () => {
   const fixture = await createCompilerFixture()
+  fixture.config.media = { missing: 'warn' }
+  const image = await realpath(path.join(path.dirname(fixture.post), 'image.png'))
   const compiler = await createAdapterCompiler(fixture.config, { retainModules: false })
   try {
+    await unlink(image)
     const result = await compiler.scan()
     assert.equal(result.compiled, 0)
     const indexFile = path.join(fixture.generatedDirectory, 'index.json')
@@ -96,23 +97,29 @@ test('scans metadata before compiling a Next cache miss on demand', async () => 
     )
     await assert.rejects(access(cacheFile), { code: 'ENOENT' })
 
-    const code = await runLoader(
-      fixture.post,
-      { configFingerprint: index.configFingerprint, indexFile },
-      fixture.source,
-    )
+    const options = { configFingerprint: index.configFingerprint, indexFile }
+    const watched = new Set<string>()
+    const code = await runLoader(fixture.post, options, fixture.source, (file) => watched.add(file))
+    assert.ok(watched.has(image))
     assert.match(code, /Hello/)
     await access(cacheFile)
+    await writeFile(image, 'restored')
+    assert.match(await runLoader(fixture.post, options, fixture.source), /import .*image\.png/)
   } finally {
     await compiler.dispose()
     await fixture.cleanup()
   }
 })
 
-function runLoader(resourcePath: string, options: ILoaderOptions, source: string): Promise<string> {
+function runLoader(
+  resourcePath: string,
+  options: ILoaderOptions,
+  source: string,
+  addDependency: (file: string) => void = () => {},
+): Promise<string> {
   return nextLoader.call(
     {
-      addDependency() {},
+      addDependency,
       getOptions: () => options,
       resourcePath,
     },

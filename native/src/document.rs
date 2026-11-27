@@ -31,6 +31,7 @@ pub struct CodeBlock {
 pub struct PreparedMdx {
     pub code_blocks: Vec<CodeBlock>,
     pub dependencies: Vec<PathBuf>,
+    pub missing_dependencies: Vec<PathBuf>,
     pub diagnostics: Vec<Diagnostic>,
     pub reading_words: usize,
     structured_data: crate::content::StructuredData,
@@ -111,6 +112,7 @@ pub fn prepare_mdx(
     Ok(PreparedMdx {
         code_blocks,
         dependencies: media.dependencies,
+        missing_dependencies: media.missing_dependencies,
         diagnostics: media.diagnostics,
         reading_words,
         structured_data: content.structured_data,

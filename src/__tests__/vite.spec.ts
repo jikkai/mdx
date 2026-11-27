@@ -2,10 +2,8 @@ import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { readFile, stat, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
-
 import { build, createBuilder, createServer } from 'vite'
-import { test } from 'vitest'
-
+import { test, vi } from 'vitest'
 import { amamoMdx } from '../vite.js'
 import { createCompilerFixture } from './fixture.js'
 
@@ -95,6 +93,45 @@ test('Vite dev watcher updates generated output for create, update, and delete',
     await unlink(secondPost)
     await waitFor(async () => !(await readFile(fixture.publicManifest, 'utf8')).includes('Second'))
     assert.doesNotMatch(await readFile(fixture.publicManifest, 'utf8'), /Second/)
+  } finally {
+    await server.close()
+    await fixture.cleanup()
+  }
+})
+
+test('Vite refreshes an imported MDX document when its image appears or disappears', async () => {
+  const fixture = await createCompilerFixture()
+  fixture.config.media = { missing: 'warn' }
+  const image = path.join(path.dirname(fixture.post), 'image.png')
+  await unlink(image)
+  const server = await createServer({
+    root: fixture.root,
+    logLevel: 'silent',
+    optimizeDeps: { noDiscovery: true },
+    plugins: [amamoMdx(fixture.config)],
+    resolve: { alias: { 'react/jsx-runtime': reactJsxRuntime } },
+    server: { host: '127.0.0.1', port: 0 },
+  })
+  const url = '/content/posts/hello.mdx'
+  try {
+    await server.listen()
+    const first = await server.transformRequest(url)
+    assert.ok(first)
+    assert.doesNotMatch(first.code, /import .*image\.png/)
+
+    await writeFile(image, 'restored')
+    await vi.waitFor(async () => {
+      const result = await server.transformRequest(url)
+      assert.ok(result)
+      assert.match(result.code, /import .*image\.png/)
+    })
+
+    await unlink(image)
+    await vi.waitFor(async () => {
+      const result = await server.transformRequest(url)
+      assert.ok(result)
+      assert.doesNotMatch(result.code, /import .*image\.png/)
+    })
   } finally {
     await server.close()
     await fixture.cleanup()
