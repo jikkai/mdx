@@ -358,14 +358,7 @@ impl PreparedBatch {
                         modified_at: document.input.modified_at,
                     };
                     if cache.enabled {
-                        let value = serde_json::to_value(&record).map_err(|error| {
-                            vec![Diagnostic::error(
-                                "AMAMO_CACHE_WRITE",
-                                Some(&record.file),
-                                format!("Could not encode cache record: {error}"),
-                            )]
-                        })?;
-                        write_cache(Path::new(&cache.directory), &document.cache_key, &value)?;
+                        write_cache(Path::new(&cache.directory), &document.cache_key, &record)?;
                     }
                     if let Some(warning) = document.cache_warning {
                         record.diagnostics.push(warning);
@@ -513,6 +506,11 @@ pub fn render_manifests(config_json: String, records_json: String) -> Result<Str
             format!("AMAMO_NATIVE_SERIALIZE: {error}"),
         )
     })
+}
+
+#[napi]
+pub fn remove_cache_entry(cache_directory: String, key: String) -> Result<()> {
+    remove_cache(Path::new(&cache_directory), &key).map_err(diagnostic_error)
 }
 
 #[napi]

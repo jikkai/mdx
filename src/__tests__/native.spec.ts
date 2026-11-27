@@ -1,12 +1,9 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-
 import { test } from 'vitest'
-
 import type { IAmamoMdxConfig } from '../config.js'
-
 import { normalizeConfig, z } from '../config.js'
 import {
   AmamoMdxError,
@@ -456,9 +453,12 @@ test('persists complete records and recovers a corrupt cache entry', async () =>
     const cacheFile = path.join(
       cachedConfig.cache.directory,
       record.cacheKey.slice(0, 2),
-      `${record.cacheKey}.json`,
+      `${record.cacheKey}.cache`,
     )
-    assert.match(await readFile(cacheFile, 'utf8'), /article/)
+    assert.deepEqual(prepareNativeBatch(cachedConfig, [input]).finish([])[0], {
+      ...record,
+      cached: true,
+    })
 
     const rendered = renderNativeManifests(cachedConfig, first)
     assert.equal(rendered.length, 1)
@@ -468,7 +468,7 @@ test('persists complete records and recovers a corrupt cache entry', async () =>
     await writeFile(cacheFile, '{truncated')
     const recovered = prepareNativeBatch(cachedConfig, [input]).finish([])
     assert.equal(recovered[0]?.diagnostics[0]?.code, 'AMAMO_CACHE_CORRUPT')
-    assert.match(await readFile(cacheFile, 'utf8'), /article/)
+    assert.equal(prepareNativeBatch(cachedConfig, [input]).finish([])[0]?.cached, true)
     assert.equal(pruneNativeCache(cachedConfig.cache.directory, []), 1)
   } finally {
     await rm(root, { recursive: true, force: true })

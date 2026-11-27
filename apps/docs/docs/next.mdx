@@ -71,11 +71,11 @@ For each imported source path, the loader:
 1. Reads `<generatedDirectory>/index.json`.
 2. Checks that its config fingerprint matches the wrapper's current normalized config.
 3. Resolves the source's cache key and validates its hexadecimal shape.
-4. Reads the corresponding JSON cache record.
-5. Verifies the record key and returns its compiled `module` string.
+4. Reuses the cached module or compiles the source on a cache miss.
+5. Registers media dependencies and returns the compiled module.
 
-Any mismatch rejects with `AMAMO_NEXT_CACHE_MISS` and asks for a coordinated rebuild. The loader is
-read-only; parsing, Shiki, manifest writing, and cache pruning happen in the wrapper-owned compiler.
+An invalid index entry raises `AMAMO_NEXT_CACHE_MISS` and requires a coordinated rebuild.
+The wrapper-owned compiler writes manifests and prunes stale entries.
 
 ## Import MDX
 

@@ -71,11 +71,11 @@ wrapper，而不是为单个请求重复创建。
 1. 读取 `<generatedDirectory>/index.json`。
 2. 检查其中的配置指纹与 wrapper 当前的归一化配置一致。
 3. 找到源码缓存键，并校验它是否为十六进制。
-4. 读取对应 JSON 缓存记录。
-5. 校验记录键并返回编译后的 `module` 字符串。
+4. 复用已缓存的模块，缓存未命中时编译源码。
+5. 注册媒体依赖，并返回编译后的模块。
 
-任何不一致都会以 `AMAMO_NEXT_CACHE_MISS` 拒绝，并要求执行协调构建。Loader 是只读的；解析、
-Shiki、manifest 写入和缓存清理都由 wrapper 拥有的编译器完成。
+索引条目无效时，loader 会抛出 `AMAMO_NEXT_CACHE_MISS`，需要重新执行协调构建。
+配置包装器持有的编译器负责写入 manifest 和清理过期缓存。
 
 ## 导入 MDX
 

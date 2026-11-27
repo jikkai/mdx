@@ -73,7 +73,7 @@ const result = await compiler.transform('/absolute/path/content/posts/hello.mdx'
 ```
 
 `transform` compiles one recognized collection file, replaces its record, rewrites affected shared
-outputs, and prunes cache records no longer in the compiler's current state.
+outputs, and removes the previous cache entry for that file when its key changes.
 
 ```ts
 interface ITransformResult {
@@ -105,7 +105,7 @@ from `config.root`.
 const outputsWritten = await compiler.remove('/absolute/path/content/posts/deleted.mdx')
 ```
 
-`remove` deletes a record already known to this compiler, updates shared outputs, prunes the cache,
+`remove` deletes a record already known to this compiler, updates shared outputs, removes that file’s cache entry,
 and returns the number of changed output files. An unknown path is a no-op returning `0`.
 
 ## `dispose()`

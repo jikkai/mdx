@@ -26,6 +26,7 @@ sha2 = "0.10.9"
 swc_core = { version = "27.0.6", features = ["common", "ecma_ast", "ecma_visit"] }
 unicode-general-category = "1.1.0"
 yaml_serde = "0.10.7"
+zstd = { version = "0.13.3", default-features = false }
 
 [build-dependencies]
 napi-build = "2.7.0"

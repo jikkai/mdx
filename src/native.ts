@@ -82,6 +82,7 @@ interface INativePreparedBatch {
 interface INativeBinding {
   prepareBatch(configJson: string, inputsJson: string): INativePreparedBatch
   pruneCache(cacheDirectory: string, keepKeysJson: string): number
+  removeCacheEntry(cacheDirectory: string, key: string): void
   renderManifests(configJson: string, recordsJson: string): string
 }
 
@@ -154,6 +155,14 @@ export function prepareNativeBatch(
     }
   } catch (error) {
     return mapNativeError(error)
+  }
+}
+
+export function removeNativeCacheEntry(cacheDirectory: string, key: string): void {
+  try {
+    loadBinding().removeCacheEntry(cacheDirectory, key)
+  } catch (error) {
+    mapNativeError(error)
   }
 }
 
