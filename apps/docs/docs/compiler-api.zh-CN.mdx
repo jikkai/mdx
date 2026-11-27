@@ -70,8 +70,8 @@ interface IBuildResult {
 const result = await compiler.transform('/absolute/path/content/posts/hello.mdx')
 ```
 
-`transform` 编译一个属于集合的文件，替换它的记录，重写受影响的共享产物，并清理不在当前
-编译器状态中的缓存记录。
+`transform` 编译一个属于集合的文件，替换它的记录，重写受影响的共享产物，并在缓存键变化时
+删除该文件的旧缓存。
 
 ```ts
 interface ITransformResult {
@@ -102,7 +102,7 @@ interface ITransformResult {
 const outputsWritten = await compiler.remove('/absolute/path/content/posts/deleted.mdx')
 ```
 
-`remove` 删除这个编译器已经知道的记录，更新共享产物，清理缓存，并返回变化的输出文件数量。
+`remove` 删除这个编译器已经知道的记录，更新共享产物，清理该文件的缓存，并返回变化的输出文件数量。
 未知路径是 no-op，返回 `0`。
 
 ## `dispose()`

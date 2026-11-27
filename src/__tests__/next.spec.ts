@@ -93,7 +93,7 @@ test('compiles a Next cache miss on demand and watches unresolved media', async 
     const cacheFile = path.join(
       index.cacheDirectory,
       document.cacheKey.slice(0, 2),
-      `${document.cacheKey}.json`,
+      `${document.cacheKey}.cache`,
     )
     await assert.rejects(access(cacheFile), { code: 'ENOENT' })
 

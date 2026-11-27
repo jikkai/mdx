@@ -17,6 +17,7 @@ import {
   configurationFingerprint,
   prepareNativeBatch,
   pruneNativeCache,
+  removeNativeCacheEntry,
   renderNativeManifests,
 } from './native.js'
 import type { IShikiRenderer } from './shiki.js'
@@ -244,16 +245,14 @@ class Compiler implements IAdapterCompiler {
   }
 
   private async removeNow(file: string): Promise<number> {
-    if (!this.records.delete(file)) return 0
+    const current = this.records.get(file)
+    if (!current) return 0
+    this.records.delete(file)
     this.modules.delete(file)
     this.sources.delete(file)
     const changed = await this.writeOutputs()
-    if (this.config.cache.enabled) {
-      pruneNativeCache(
-        this.config.cache.directory,
-        [...this.records.values()].map((record) => record.cacheKey),
-      )
-    }
+    if (this.config.cache.enabled)
+      removeNativeCacheEntry(this.config.cache.directory, current.cacheKey)
     await this.notifyGeneratedChange(changed)
     return changed.length
   }
@@ -300,11 +299,8 @@ class Compiler implements IAdapterCompiler {
       this.sources.set(file, document.input.source)
     }
     const changed = await this.writeOutputs()
-    if (this.config.cache.enabled) {
-      pruneNativeCache(
-        this.config.cache.directory,
-        [...this.records.values()].map((value) => value.cacheKey),
-      )
+    if (this.config.cache.enabled && current && current.cacheKey !== record.cacheKey) {
+      removeNativeCacheEntry(this.config.cache.directory, current.cacheKey)
     }
     await this.notifyGeneratedChange(changed)
     return {

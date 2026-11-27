@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { readFile, unlink, writeFile } from 'node:fs/promises'
+import { access, readFile, unlink, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -48,6 +48,32 @@ test('build, warm build, update, and delete share one document index', async () 
     const generatedSources = await Promise.all(generated.map((file) => readFile(file, 'utf8')))
     generatedSources.forEach((source) => assert.doesNotMatch(source, /article/))
   } finally {
+    await compiler.dispose()
+    await fixture.cleanup()
+  }
+})
+
+test('incremental edits and removals preserve cached documents outside the current compiler', async () => {
+  const fixture = await createCompilerFixture()
+  const compiler = await createCompiler(fixture.config)
+  const partial = await createCompiler(fixture.config)
+  const other = path.join(path.dirname(fixture.post), 'another.mdx')
+  try {
+    await writeFile(other, fixture.source)
+    await compiler.build()
+    const previous = await partial.transform(fixture.post)
+    const entry = (key: string) =>
+      path.join(fixture.generatedDirectory, 'cache', key.slice(0, 2), `${key}.cache`)
+    await writeFile(fixture.post, fixture.updatedSource)
+    const updated = await partial.transform(fixture.post)
+    await assert.rejects(access(entry(previous.record.cacheKey)), { code: 'ENOENT' })
+    assert.equal((await compiler.transform(other)).cached, true)
+
+    await partial.remove(fixture.post)
+    await assert.rejects(access(entry(updated.record.cacheKey)), { code: 'ENOENT' })
+    assert.equal((await compiler.transform(other)).cached, true)
+  } finally {
+    await partial.dispose()
     await compiler.dispose()
     await fixture.cleanup()
   }

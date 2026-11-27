@@ -329,6 +329,10 @@ mode, normalized config plus runtime package versions, source path and bytes, an
 `lastModified` value. Adding a previously missing media file or removing a referenced file invalidates the cached
 module on the next compilation.
 
+The compiler stores small cache records as plain JSON. For records from 4 KiB through 64 MiB it
+tries Zstd compression and keeps the smaller result. Larger records stay uncompressed to bound
+the memory allocated when decompressing a cache entry.
+
 Corrupt records are removed and recompiled with an `AMAMO_CACHE_CORRUPT` warning. A successful full
 build prunes records no longer referenced by the discovered content set.
 
